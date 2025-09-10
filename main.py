@@ -665,9 +665,18 @@ class ShoptetScraper:
             
             # Konverze na RGB s lepším zpracováním průhlednosti
             if image.mode == 'P':
-                # Palette s průhledností -> RGBA
+                # Palette s průhledností -> RGBA -> RGB s bílým pozadím
                 image = image.convert('RGBA')
-            elif image.mode in ('RGBA', 'CMYK'):
+                # Vytvoření bílého pozadí pro RGBA obrázky
+                background = PILImage.new('RGB', image.size, (255, 255, 255))
+                background.paste(image, mask=image.split()[-1])  # Použije alpha kanál jako masku
+                image = background
+            elif image.mode == 'RGBA':
+                # RGBA -> RGB s bílým pozadím
+                background = PILImage.new('RGB', image.size, (255, 255, 255))
+                background.paste(image, mask=image.split()[-1])  # Použije alpha kanál jako masku
+                image = background
+            elif image.mode == 'CMYK':
                 image = image.convert('RGB')
             elif image.mode not in ('RGB', 'L'):
                 # Jiné módy -> RGB
@@ -679,6 +688,10 @@ class ShoptetScraper:
             image_path = os.path.join(images_folder, image_filename)
             
             # Uložení obrázku jako JPEG s kvalitou 85
+            # Zajištění, že obrázek je v RGB módu před uložením
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            
             image.save(image_path, format='JPEG', quality=85, optimize=True)
             return image_filename
             
