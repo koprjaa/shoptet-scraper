@@ -145,6 +145,9 @@ scraped_data/
 feeds/
 images/
 
+# Project specific output
+./output/
+
 # IDE files
 .vscode/
 .idea/

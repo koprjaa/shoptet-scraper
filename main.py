@@ -198,10 +198,11 @@ class OutputManager:
         Inicializace output manageru.
         
         Args:
-            base_path: Základní cesta pro výstupy (default: ~/Desktop/ShoptetScraper)
+            base_path: Základní cesta pro výstupy (default: ./output)
         """
         if base_path is None:
-            base_path = os.path.expanduser('~/Desktop/ShoptetScraper')
+            # Uložení do kořenové složky projektu
+            base_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
         
         self.base_path = base_path
         self.today = datetime.now().strftime("%Y-%m-%d")
@@ -537,7 +538,12 @@ class ShoptetScraper:
             backoff_factor=0.5,
             status_forcelist=(500, 502, 504),
         )
-        adapter = HTTPAdapter(max_retries=retry)
+        # Zvýšení velikosti connection poolu pro paralelní stahování
+        adapter = HTTPAdapter(
+            max_retries=retry,
+            pool_connections=100,
+            pool_maxsize=100
+        )
         session.mount('http://', adapter)
         session.mount('https://', adapter)
         return session
@@ -650,10 +656,21 @@ class ShoptetScraper:
         try:
             response = self.session.get(img_url, timeout=10)
             response.raise_for_status()
-            image = PILImage.open(BytesIO(response.content))
             
-            # Konverze na RGB, pokud je to potřeba
-            if image.mode in ('RGBA', 'P', 'CMYK'):
+            # Potlačení PIL warnings
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                image = PILImage.open(BytesIO(response.content))
+            
+            # Konverze na RGB s lepším zpracováním průhlednosti
+            if image.mode == 'P':
+                # Palette s průhledností -> RGBA
+                image = image.convert('RGBA')
+            elif image.mode in ('RGBA', 'CMYK'):
+                image = image.convert('RGB')
+            elif image.mode not in ('RGB', 'L'):
+                # Jiné módy -> RGB
                 image = image.convert('RGB')
             
             # Sanitizace názvu souboru a přidání indexu pro jedinečnost
@@ -662,7 +679,7 @@ class ShoptetScraper:
             image_path = os.path.join(images_folder, image_filename)
             
             # Uložení obrázku jako JPEG s kvalitou 85
-            image.save(image_path, format='JPEG', quality=85)
+            image.save(image_path, format='JPEG', quality=85, optimize=True)
             return image_filename
             
         except Exception as e:
@@ -978,7 +995,7 @@ Příklady použití:
     parser.add_argument(
         '--output',
         type=str,
-        help='Cesta pro výstupní složky (default: ~/Desktop/ShoptetScraper)'
+        help='Cesta pro výstupní složky (default: ./output)'
     )
     
     parser.add_argument(

@@ -64,7 +64,7 @@ python main.py --help
 ## Struktura výstupu
 
 ```
-~/Desktop/ShoptetScraper/
+./output/
 ├── 2024-01-15_001/
 │   ├── StoreName1/
 │   │   ├── images/
@@ -102,7 +102,7 @@ Logy se ukládají do `shoptet_scraper.log` a zobrazují se v konzoli.
 
 ### Výstupní složky
 
-Výchozí výstupní složka: `~/Desktop/ShoptetScraper`
+Výchozí výstupní složka: `./output` (v kořenové složce projektu)
 
 Struktura číslování: `YYYY-MM-DD_XXX` (datum_session)
 
