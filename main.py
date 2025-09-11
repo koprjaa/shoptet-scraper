@@ -87,12 +87,18 @@ class ShoptetStoreDiscovery:
             total=3,
             read=3,
             connect=3,
-            backoff_factor=0.5,
-            status_forcelist=(500, 502, 504),
+            backoff_factor=1.0,
+            status_forcelist=(500, 502, 504, 408, 429),
         )
         adapter = HTTPAdapter(max_retries=retry)
         session.mount('http://', adapter)
         session.mount('https://', adapter)
+        
+        # Nastavení výchozích headers
+        session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        })
+        
         return session
     
     def discover_store_from_url(self, base_url: str) -> Optional[Dict[str, str]]:
@@ -152,16 +158,43 @@ class ShoptetStoreDiscovery:
             
             for test_url in test_urls:
                 try:
-                    response = self.session.head(test_url, timeout=5)
+                    # Zvýšení timeoutu na 15 sekund a použití GET místo HEAD
+                    response = self.session.get(test_url, timeout=15, stream=True)
                     if response.status_code == 200:
-                        self.logger.info(f" Shoptet obchod nalezen: {url}")
-                        return True
-                except:
+                        # Kontrola, zda obsahuje XML hlavičku nebo Shoptet značky
+                        content_type = response.headers.get('content-type', '').lower()
+                        if 'xml' in content_type or 'text/xml' in content_type:
+                            self.logger.info(f" Shoptet obchod nalezen: {url} (feed: {test_url})")
+                            return True
+                        
+                        # Alternativní kontrola - načtení prvních 500 bytů pro kontrolu XML obsahu
+                        try:
+                            content_preview = response.content[:500].decode('utf-8', errors='ignore')
+                            if '<?xml' in content_preview or '<SHOP' in content_preview or '<rss' in content_preview:
+                                self.logger.info(f" Shoptet obchod nalezen: {url} (XML obsah detekován)")
+                                return True
+                        except:
+                            pass
+                            
+                except Exception as e:
+                    self.logger.debug(f" Test URL {test_url} selhal: {e}")
                     continue
+            
+            # Fallback: kontrola hlavní stránky pro Shoptet značky
+            try:
+                response = self.session.get(url, timeout=10)
+                if response.status_code == 200:
+                    content = response.text.lower()
+                    if 'shoptet' in content or 'shoptet.cz' in content:
+                        self.logger.info(f" Shoptet obchod nalezen: {url} (Shoptet značky na hlavní stránce)")
+                        return True
+            except Exception as e:
+                self.logger.debug(f" Fallback kontrola hlavní stránky selhala: {e}")
             
             return False
             
-        except Exception:
+        except Exception as e:
+            self.logger.debug(f" Chyba při kontrole Shoptet obchodu {url}: {e}")
             return False
     
     def discover_stores_from_list(self, url_list: List[str]) -> Dict[str, Dict[str, str]]:
