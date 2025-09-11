@@ -1160,7 +1160,7 @@ def run_scraper_for_store(store_config: Dict[str, str], feed_type: str,
 
     # Parsování XML
     root = scraper.parse_xml(xml_path)
-    if not root:
+    if root is None:
         logger.error(" Nepodařilo se parsovat XML")
         return
 
