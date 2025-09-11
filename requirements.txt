@@ -3,3 +3,4 @@ openpyxl>=3.0.10
 Pillow>=9.0.0
 tqdm>=4.64.0
 urllib3>=1.26.0
+beautifulsoup4>=4.11.0

@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 import argparse
 import sys
 from abc import ABC, abstractmethod
+from bs4 import BeautifulSoup
 
 
 # Typy XML feedů podporované Shoptetem
@@ -63,6 +64,98 @@ XML_FEED_TYPES = {
 }
 
 # Žádné hardcodované obchody - vše se objevuje dynamicky
+
+
+class ProductImageScraper:
+    """
+    Třída pro stahování všech obrázků z galerie produktů.
+    """
+    
+    def __init__(self, logger: logging.Logger):
+        """
+        Inicializace scraperu obrázků produktů.
+        
+        Args:
+            logger: Logger instance
+        """
+        self.logger = logger
+        self.session = self._create_session()
+    
+    def _create_session(self) -> requests.Session:
+        """Vytvoření session s retry mechanizmem."""
+        session = requests.Session()
+        retry = Retry(
+            total=3,
+            read=3,
+            connect=3,
+            backoff_factor=1.0,
+            status_forcelist=(500, 502, 504, 408, 429),
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+        
+        # Nastavení výchozích headers
+        session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        })
+        
+        return session
+    
+    def extract_all_product_images(self, product_url: str) -> List[Tuple[str, str]]:
+        """
+        Extrakce všech obrázků z galerie produktu.
+        
+        Args:
+            product_url: URL stránky produktu
+            
+        Returns:
+            Seznam tuple (image_url, alt_text) pro všechny obrázky
+        """
+        try:
+            response = self.session.get(product_url, timeout=15)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            images = []
+            
+            # Hledání hlavního obrázku
+            main_image = soup.find('a', class_='p-main-image')
+            if main_image:
+                img_url = main_image.get('href')
+                if img_url:
+                    # Konverze z /big/ na /orig/ pro nejvyšší kvalitu
+                    orig_url = img_url.replace('/big/', '/orig/')
+                    alt_text = main_image.find('img').get('alt', '') if main_image.find('img') else ''
+                    images.append((orig_url, alt_text))
+            
+            # Hledání obrázků v galerii miniatur
+            thumbnails = soup.find_all('a', class_='p-thumbnail')
+            for thumbnail in thumbnails:
+                img_url = thumbnail.get('href')
+                if img_url and img_url not in [img[0] for img in images]:  # Vyhnutí se duplicitám
+                    # Konverze z /big/ na /orig/ pro nejvyšší kvalitu
+                    orig_url = img_url.replace('/big/', '/orig/')
+                    alt_text = thumbnail.find('img').get('alt', '') if thumbnail.find('img') else ''
+                    images.append((orig_url, alt_text))
+            
+            # Alternativní hledání pomocí data-src atributů
+            data_src_images = soup.find_all('img', {'data-src': True})
+            for img in data_src_images:
+                data_src = img.get('data-src')
+                if data_src and '/related/' in data_src:
+                    # Konverze z /related/ na /orig/ pro nejvyšší kvalitu
+                    orig_url = data_src.replace('/related/', '/orig/')
+                    alt_text = img.get('alt', '')
+                    if orig_url not in [img[0] for img in images]:  # Vyhnutí se duplicitám
+                        images.append((orig_url, alt_text))
+            
+            self.logger.info(f" Nalezeno {len(images)} obrázků pro produkt: {product_url}")
+            return images
+            
+        except Exception as e:
+            self.logger.error(f" Chyba při extrakci obrázků z {product_url}: {e}")
+            return []
 
 
 class ShoptetStoreDiscovery:
@@ -545,7 +638,8 @@ class ShoptetScraper:
     zpracování produktů a export do Excel souborů s obrázky.
     """
     
-    def __init__(self, store_config: Dict[str, str], feed_type: str, logger: logging.Logger):
+    def __init__(self, store_config: Dict[str, str], feed_type: str, logger: logging.Logger, 
+                 scrape_all_images: bool = False):
         """
         Inicializace scraperu.
         
@@ -553,13 +647,16 @@ class ShoptetScraper:
             store_config: Konfigurace obchodu z SHOPTET_STORES
             feed_type: Typ XML feedu z XML_FEED_TYPES
             logger: Logger instance
+            scrape_all_images: Zda stahovat všechny obrázky z galerie produktů
         """
         self.store_config = store_config
         self.feed_type = feed_type
         self.feed_config = XML_FEED_TYPES[feed_type]
         self.logger = logger
+        self.scrape_all_images = scrape_all_images
         self.session = self._create_session()
         self.xml_parser = get_xml_parser(feed_type, logger)
+        self.image_scraper = ProductImageScraper(logger) if scrape_all_images else None
         
     def _create_session(self) -> requests.Session:
         """Vytvoření session s retry mechanizmem."""
@@ -672,7 +769,45 @@ class ShoptetScraper:
         Returns:
             Seznam tuple (index, img_url, product_no, product_name)
         """
-        return self.xml_parser.extract_image_data(root)
+        if not self.scrape_all_images:
+            return self.xml_parser.extract_image_data(root)
+        
+        # Rozšířená extrakce pro všechny obrázky z galerie
+        return self._extract_all_product_images(root)
+    
+    def _extract_all_product_images(self, root: ET.Element) -> List[Tuple[int, str, str, str]]:
+        """
+        Extrakce všech obrázků z galerie produktů.
+        
+        Args:
+            root: Root element XML
+            
+        Returns:
+            Seznam tuple (index, img_url, product_no, product_name)
+        """
+        all_images = []
+        shopitems = root.findall('.//SHOPITEM')
+        
+        self.logger.info(f" Extrakce všech obrázků z {len(shopitems)} produktů...")
+        
+        for index, shopitem in enumerate(shopitems, start=1):
+            product_url = shopitem.findtext('URL', default='')
+            product_no = shopitem.findtext('PRODUCTNO', default=f"product_{index}")
+            product_name = shopitem.findtext('PRODUCT', default=f"product_{index}")
+            
+            if not product_url:
+                continue
+                
+            # Extrakce všech obrázků z galerie produktu
+            product_images = self.image_scraper.extract_all_product_images(product_url)
+            
+            for img_index, (img_url, alt_text) in enumerate(product_images):
+                # Vytvoření jedinečného indexu pro každý obrázek
+                unique_index = f"{index}_{img_index + 1}"
+                all_images.append((unique_index, img_url, product_no, product_name))
+        
+        self.logger.info(f" Nalezeno celkem {len(all_images)} obrázků z galerií produktů")
+        return all_images
     
     def download_and_save_image(self, data: Tuple[int, str, str, str], images_folder: str) -> Optional[str]:
         """
@@ -717,7 +852,8 @@ class ShoptetScraper:
             
             # Sanitizace názvu souboru a přidání indexu pro jedinečnost
             sanitized_name = sanitize_filename(product_name)
-            image_filename = f"{sanitized_name}_{product_no}_{index}.jpg"
+            sanitized_product_no = sanitize_filename(product_no)
+            image_filename = f"{sanitized_name}_{sanitized_product_no}_{index}.jpg"
             image_path = os.path.join(images_folder, image_filename)
             
             # Uložení obrázku jako JPEG s kvalitou 85
@@ -946,7 +1082,7 @@ def requests_retry_session(retries=5, backoff_factor=0.5, status_forcelist=(500,
 
 def sanitize_filename(filename):
     """Odstranění nepovolených znaků z názvu souboru a přidání PRODUCTNO pro jedinečnost."""
-    # Odstranění nepovolených znaků
+    # Odstranění nepovolených znaků včetně lomítek
     sanitized = re.sub(r'[\\/*?:"<>|]', "_", filename)
     return sanitized
 
@@ -966,7 +1102,8 @@ def download_and_save_image(data, session, images_folder):
             image = image.convert('RGB')
         # Sanitizace názvu souboru a přidání indexu pro jedinečnost
         sanitized_name = sanitize_filename(product_name)
-        image_filename = f"{sanitized_name}_{product_no}_{index}.jpg"
+        sanitized_product_no = sanitize_filename(product_no)
+        image_filename = f"{sanitized_name}_{sanitized_product_no}_{index}.jpg"
         image_path = os.path.join(images_folder, image_filename)
         # Uložení obrázku jako JPEG s kvalitou 85
         image.save(image_path, format='JPEG', quality=85)
@@ -1050,6 +1187,12 @@ Příklady použití:
         help='Verbose výstup'
     )
     
+    parser.add_argument(
+        '--all-images', '-a',
+        action='store_true',
+        help='Stahovat všechny obrázky z galerie produktů (pomalejší)'
+    )
+    
     return parser.parse_args()
 
 
@@ -1082,7 +1225,7 @@ def main():
                 return
             
             logger.info(f" Spouštění scraperu pro obchod: {store_config['name']} (Universal feed)")
-            run_scraper_for_store(store_config, 'universal', output_manager, logger)
+            run_scraper_for_store(store_config, 'universal', output_manager, logger, args.all_images)
         else:
             # Interaktivní režim - zadání URL obchodů
             print("\n=== Univerzální Shoptet Scraper ===")
@@ -1121,14 +1264,15 @@ def main():
                 store_key, feed_type = selection
                 store_data = available_stores[store_key]
                 store_config = store_data['store_config']
-                run_scraper_for_store(store_config, feed_type, output_manager, logger)
+                run_scraper_for_store(store_config, feed_type, output_manager, logger, args.all_images)
 
 
 # Staré funkce odstraněny - nahrazeny novou architekturou
 
 
 def run_scraper_for_store(store_config: Dict[str, str], feed_type: str, 
-                          output_manager: OutputManager, logger: logging.Logger):
+                          output_manager: OutputManager, logger: logging.Logger,
+                          scrape_all_images: bool = False):
     """
     Spuštění scraperu pro konkrétní obchod a typ feedu.
     
@@ -1137,16 +1281,18 @@ def run_scraper_for_store(store_config: Dict[str, str], feed_type: str,
         feed_type: Typ XML feedu z XML_FEED_TYPES
         output_manager: Manager pro výstupní složky
         logger: Logger instance
+        scrape_all_images: Zda stahovat všechny obrázky z galerie produktů
     """
     if feed_type not in XML_FEED_TYPES:
         logger.error(f" Neznámý typ feedu: {feed_type}")
         return
     
     feed_config = XML_FEED_TYPES[feed_type]
-    logger.info(f" Spouštění scraperu pro obchod: {store_config['name']}, feed: {feed_config['name']}")
+    mode_text = "všechny obrázky z galerií" if scrape_all_images else "pouze hlavní obrázky"
+    logger.info(f" Spouštění scraperu pro obchod: {store_config['name']}, feed: {feed_config['name']}, režim: {mode_text}")
     
     # Vytvoření scraperu
-    scraper = ShoptetScraper(store_config, feed_type, logger)
+    scraper = ShoptetScraper(store_config, feed_type, logger, scrape_all_images)
     
     # Vytvoření složek pro výstup
     store_path = output_manager.get_store_path(store_config['name'])
