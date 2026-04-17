@@ -1,165 +1,85 @@
-# Univerzální Shoptet Scraper
+# shoptet-scraper
 
-Univerzální scraper pro stahování XML feedů a produktů z Shoptet obchodů. Automaticky objevuje dostupné obchody a podporuje různé typy XML feedů.
+**Discovers Shoptet e-shops from a URL and downloads their product feeds (Universal, Google Shopping, Heureka, Zboží.cz) into Excel, with parallel image downloads.**
 
-## Funkce
+![python](https://img.shields.io/badge/python-3.7+-3776AB?style=flat-square&logo=python&logoColor=white)
+![license](https://img.shields.io/badge/license-MIT-A31F34?style=flat-square)
+![status](https://img.shields.io/badge/status-active-22863A?style=flat-square)
+![requests](https://img.shields.io/badge/requests-2.x-000?style=flat-square)
+![openpyxl](https://img.shields.io/badge/openpyxl-3.x-217346?style=flat-square)
+![Pillow](https://img.shields.io/badge/Pillow-11.x-8B0000?style=flat-square)
 
-- 🔍 **Automatické objevování** - Dynamicky objevuje Shoptet obchody z URL
-- 📊 **Více typů feedů** - Podporuje Universal, Google Shopping, Heureka a další XML feedy
-- 🖼️ **Stahování obrázků** - Paralelní stahování a konverze obrázků produktů
-- 📁 **Strukturovaný výstup** - Organizované složky s číslováním session
-- 📈 **Excel export** - Export dat do Excel souborů s automatickým formátováním
-- 🔄 **Retry mechanismus** - Robustní zpracování chyb a opakování požadavků
-- 📝 **Detailní logování** - Kompletní logování všech operací
+Shoptet is a large Czech/Slovak e-commerce platform (used by ~30,000 shops). Every shop exposes product data at conventional `/universal.xml`, `/google.xml`, `/heureka.xml`, `/zbozi.xml`, `/supplier.xml` endpoints. This tool auto-detects which feeds a given shop serves, parses them, writes to Excel in session-numbered folders, and downloads product images in parallel.
 
-## Podporované XML feedy
+## Quick start
 
-- **Universal XML Feed** (`/universal.xml`) - Univerzální feed pro všechny produkty
-- **Google Shopping XML Feed** (`/google.xml`) - Feed pro Google Shopping
-- **Heureka XML Feed** (`/heureka.xml`) - Feed pro srovnávač cen Heureka
-- **Zboží.cz XML Feed** (`/zbozi.xml`) - Feed pro srovnávač cen Zboží.cz
-- **Shoptet Dodavatelský XML Feed** (`/supplier.xml`) - Feed pro dodavatele
-
-## Instalace
-
-### Požadavky
-
-- Python 3.7+
-- Požadované balíčky (viz requirements.txt)
-
-### Instalace závislostí
-
-```bash
-pip install -r requirements.txt
-```
-
-## Použití
-
-### Interaktivní režim
+Interactive (paste URLs, one per line, blank line to submit):
 
 ```bash
 python main.py eshop
 ```
 
-Program vás vyzve k zadání URL Shoptet obchodů. Zadejte jeden URL na řádek a prázdný řádek pro ukončení zadávání.
-
-### Přímé spuštění
-
-```bash
-python main.py eshop --store https://example.shoptet.cz
-```
-
-### Vlastní výstupní složka
-
-```bash
-python main.py eshop --store https://example.shoptet.cz --output /path/to/output
-```
-
-### Nápověda
-
-```bash
-python main.py --help
-```
-
-## Struktura výstupu
-
-```
-./output/
-├── 2024-01-15_001/
-│   ├── StoreName1/
-│   │   ├── images/
-│   │   │   ├── product1_001_1.jpg
-│   │   │   └── product2_001_2.jpg
-│   │   ├── feed_storename1_universal_15-01-2024_part_1.xlsx
-│   │   └── feed_storename1_universal_15-01-2024_part_2.xlsx
-│   └── StoreName2/
-│       ├── images/
-│       └── feed_storename2_google_15-01-2024_part_1.xlsx
-└── 2024-01-15_002/
-    └── ...
-```
-
-## Architektura
-
-### Hlavní třídy
-
-- **`ShoptetStoreDiscovery`** - Objevování Shoptet obchodů z URL
-- **`ShoptetScraper`** - Hlavní scraper pro konkrétní obchod a typ feedu
-- **`XMLFeedParser`** - Abstraktní třída pro parsování XML feedů
-- **`OutputManager`** - Správa výstupních složek s číslováním
-
-### Typy parserů
-
-- **`UniversalXMLParser`** - Parser pro Universal XML feed
-- **`GoogleXMLParser`** - Parser pro Google Shopping XML feed
-- **`HeurekaXMLParser`** - Parser pro Heureka XML feed
-
-## Konfigurace
-
-### Logování
-
-Logy se ukládají do `shoptet_scraper.log` a zobrazují se v konzoli.
-
-### Výstupní složky
-
-Výchozí výstupní složka: `./output` (v kořenové složce projektu)
-
-Struktura číslování: `YYYY-MM-DD_XXX` (datum_session)
-
-## Příklady použití
-
-### Scraping jednoho obchodu
+Direct:
 
 ```bash
 python main.py eshop --store https://www.gardners-eshop.cz
 ```
 
-### Scraping více obchodů
+With image gallery (slower — downloads every image, not just the main one):
 
 ```bash
-python main.py eshop
-# Zadejte URL obchodů:
-# https://www.gardners-eshop.cz
-# https://www.example-shop.shoptet.cz
-# (prázdný řádek pro ukončení)
+python main.py eshop --store https://example.shoptet.cz --all-images
 ```
 
-### Vlastní výstupní složka
+## What happens per run
 
-```bash
-python main.py eshop --store https://www.gardners-eshop.cz --output /Users/jan/Documents/ScrapedData
+1. Shop discovery — resolves URL to a canonical Shoptet domain and probes the five known feed endpoints
+2. For every feed found, picks the matching parser (`UniversalXMLParser`, `GoogleXMLParser`, `HeurekaXMLParser`, …)
+3. Streams the feed, splits into chunks for Excel's 1M-row limit
+4. Parallel image download via `ThreadPoolExecutor`, saved as `productN_NNN_M.jpg` in per-shop `images/`
+5. Writes one Excel per chunk with auto-sized columns
+
+Output structure:
+
+```
+output/
+└── 2026-04-17_001/
+    └── GardnersShop/
+        ├── images/
+        │   ├── product1_001_1.jpg
+        │   └── product2_001_2.jpg
+        ├── feed_gardners_universal_17-04-2026_part_1.xlsx
+        └── feed_gardners_universal_17-04-2026_part_2.xlsx
 ```
 
-## Řešení problémů
+Session folders are auto-numbered (`YYYY-MM-DD_NNN`), so you can run the scraper repeatedly against the same shop without clobbering earlier snapshots.
 
-### Chyby při stahování
+## Flags
 
-- Zkontrolujte internetové připojení
-- Ověřte, že URL obchodu je správné
-- Zkontrolujte, zda obchod má dostupné XML feedy
+| flag | default | effect |
+|------|---------|--------|
+| `eshop` | required positional | mode: discover + scrape |
+| `--store <url>` | — | skip interactive URL input |
+| `--output <path>` | `./output` | session parent folder |
+| `--verbose, -v` | off | enable DEBUG logs |
+| `--all-images, -a` | off | download every image in gallery, not just main |
 
-### Chyby při parsování
+## Architecture
 
-- Ověřte, že XML feed má správný formát
-- Zkontrolujte logy pro detailní chybové zprávy
+```
+ShoptetStoreDiscovery  →  ShoptetScraper  →  XMLFeedParser (Universal / Google / Heureka …)
+                                          →  OutputManager  (session folders + xlsx writer)
+                                          →  ThreadPoolExecutor  (parallel image DL)
+```
 
-### Problémy s obrázky
+Parsers are abstract-class + concrete implementations, so adding a sixth feed format (e.g. `/facebook.xml`) is ~50 lines.
 
-- Ověřte dostupnost obrázků na serveru
-- Zkontrolujte oprávnění k zápisu do výstupní složky
+## Limits
 
-## Přispívání
+- No resume — a crash mid-run means the session folder is half-populated. Just delete it and re-run.
+- Image download has no bandwidth throttle; on shops with tens of thousands of products, expect temporary rate-limiting from the origin.
+- Assumes Shoptet's current URL convention; custom templates with relocated feed endpoints will fail discovery.
 
-1. Forkněte repository
-2. Vytvořte feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commitněte změny (`git commit -m 'Add some AmazingFeature'`)
-4. Pushněte do branch (`git push origin feature/AmazingFeature`)
-5. Otevřete Pull Request
+## License
 
-## Licence
-
-Tento projekt je licencován pod MIT licencí - viz soubor [LICENSE](LICENSE) pro detaily.
-
-## Podpora
-
-Pokud narazíte na problémy nebo máte návrhy na vylepšení, vytvořte issue v GitHub repository.
+[MIT](LICENSE)
