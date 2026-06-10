@@ -2,6 +2,13 @@ import requests
 from datetime import datetime
 import os
 import xml.etree.ElementTree as ET
+try:
+    # Preferovaný bezpečný parser (ochrana proti entity expansion / XXE).
+    import defusedxml.ElementTree as _DET
+    _HAVE_DEFUSEDXML = True
+except ImportError:
+    _DET = None
+    _HAVE_DEFUSEDXML = False
 from openpyxl import Workbook
 from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -11,12 +18,158 @@ from PIL import Image as PILImage
 from tqdm import tqdm
 import re
 import logging
+import socket
+import ipaddress
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 import argparse
 import sys
 from abc import ABC, abstractmethod
 from bs4 import BeautifulSoup
+
+
+# Bezpečnostní limity
+# Cap na počet pixelů dekódovaného obrázku (ochrana proti decompression bomb).
+# PIL.Image.MAX_IMAGE_PIXELS výchozí je ~89M; nastavujeme konzervativněji.
+PILImage.MAX_IMAGE_PIXELS = 50_000_000
+# Maximální velikost staženého obrázku v bytech (ochrana proti přetečení paměti).
+MAX_IMAGE_DOWNLOAD_BYTES = 30 * 1024 * 1024  # 30 MB
+
+
+def is_safe_url(url: str) -> bool:
+    """
+    Robustní validace odchozí URL jako ochrana proti SSRF.
+
+    Vyžaduje http/https schéma, rozliší hostname přes DNS a odmítne
+    privátní, loopback, link-local a jiné rezervované IP adresy.
+
+    Args:
+        url: URL k ověření
+
+    Returns:
+        True pokud je URL bezpečná pro odchozí požadavek, jinak False.
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False
+
+    if parsed.scheme not in ('http', 'https'):
+        return False
+
+    hostname = parsed.hostname
+    if not hostname:
+        return False
+
+    # Rozlišení všech IP adres pro daný hostname (IPv4 i IPv6).
+    try:
+        addr_infos = socket.getaddrinfo(hostname, None)
+    except (socket.gaierror, UnicodeError, Exception):
+        return False
+
+    if not addr_infos:
+        return False
+
+    for info in addr_infos:
+        ip_str = info[4][0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            return False
+        # Odmítnutí všech neveřejných / rezervovaných adres.
+        if (ip.is_private or ip.is_loopback or ip.is_link_local or
+                ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            return False
+
+    return True
+
+
+def download_image_bytes(session, url: str, timeout: int = 10) -> Optional[bytes]:
+    """
+    Bezpečné stažení bytů obrázku s SSRF kontrolou a limitem velikosti.
+
+    Args:
+        session: requests.Session
+        url: URL obrázku
+        timeout: timeout v sekundách
+
+    Returns:
+        Byty obrázku nebo None při chybě/odmítnutí.
+    """
+    if not is_safe_url(url):
+        return None
+
+    response = session.get(url, timeout=timeout, stream=True)
+    response.raise_for_status()
+
+    # Kontrola deklarované velikosti.
+    content_length = response.headers.get('content-length')
+    if content_length is not None:
+        try:
+            if int(content_length) > MAX_IMAGE_DOWNLOAD_BYTES:
+                raise ValueError(
+                    f"Obrázek překračuje limit velikosti ({content_length} bytů)"
+                )
+        except (TypeError, ValueError) as exc:
+            if isinstance(exc, ValueError) and 'limit' in str(exc):
+                raise
+            # Nevalidní hlavička content-length -> spoléháme na limit při čtení.
+
+    # Čtení s tvrdým limitem (i kdyby content-length chyběl nebo lhal).
+    chunks = []
+    total = 0
+    for chunk in response.iter_content(chunk_size=65536):
+        if not chunk:
+            continue
+        total += len(chunk)
+        if total > MAX_IMAGE_DOWNLOAD_BYTES:
+            raise ValueError("Stažený obrázek překročil maximální povolenou velikost")
+        chunks.append(chunk)
+
+    return b''.join(chunks)
+
+
+def sanitize_xlsx_value(value):
+    """
+    Ochrana proti CSV/XLSX formula injection.
+
+    Pokud hodnota začíná znakem, který tabulkové procesory interpretují
+    jako vzorec, prefixujeme ji apostrofem.
+
+    Args:
+        value: libovolná hodnota buňky
+
+    Returns:
+        Sanitizovaná hodnota.
+    """
+    if isinstance(value, str) and value and value[0] in ('=', '+', '-', '@', '\t', '\r'):
+        return "'" + value
+    return value
+
+
+def safe_xml_parse(xml_path: str):
+    """
+    Bezpečné parsování XML souboru.
+
+    Použije defusedxml, pokud je dostupné (ochrana proti entity expansion / XXE).
+    Pokud není, odmítne soubory obsahující DOCTYPE/ENTITY a teprve poté parsuje
+    standardním ElementTree.
+
+    Args:
+        xml_path: cesta k XML souboru
+
+    Returns:
+        ElementTree objekt.
+    """
+    if _HAVE_DEFUSEDXML:
+        return _DET.parse(xml_path)
+
+    # Fallback bez defusedxml: odmítnout DOCTYPE (a tím i entity definice).
+    with open(xml_path, 'rb') as fh:
+        head = fh.read(65536).lower()
+    if b'<!doctype' in head or b'<!entity' in head:
+        raise ValueError("XML obsahuje DOCTYPE/ENTITY – odmítnuto z bezpečnostních důvodů")
+    return ET.parse(xml_path)
 
 
 # Typy XML feedů podporované Shoptetem
@@ -113,9 +266,13 @@ class ProductImageScraper:
             Seznam tuple (image_url, alt_text) pro všechny obrázky
         """
         try:
+            if not is_safe_url(product_url):
+                self.logger.error(f" Odmítnuta nebezpečná URL produktu: {product_url}")
+                return []
+
             response = self.session.get(product_url, timeout=15)
             response.raise_for_status()
-            
+
             soup = BeautifulSoup(response.content, 'html.parser')
             images = []
             
@@ -242,6 +399,11 @@ class ShoptetStoreDiscovery:
             True pokud je to Shoptet obchod
         """
         try:
+            # SSRF ochrana: odmítnutí neveřejných cílů.
+            if not is_safe_url(url):
+                self.logger.warning(f" Odmítnuta nebezpečná URL obchodu: {url}")
+                return False
+
             # Kontrola některého z XML feedů
             test_urls = [
                 f"{url}/universal.xml",
@@ -487,7 +649,7 @@ class UniversalXMLParser(XMLFeedParser):
     def parse_xml(self, xml_path: str) -> Optional[ET.Element]:
         """Parsování Universal XML feedu."""
         try:
-            tree = ET.parse(xml_path)
+            tree = safe_xml_parse(xml_path)
             root = tree.getroot()
             self.logger.info(f" Universal XML úspěšně parsováno: {xml_path}")
             return root
@@ -525,7 +687,7 @@ class GoogleXMLParser(XMLFeedParser):
     def parse_xml(self, xml_path: str) -> Optional[ET.Element]:
         """Parsování Google XML feedu."""
         try:
-            tree = ET.parse(xml_path)
+            tree = safe_xml_parse(xml_path)
             root = tree.getroot()
             self.logger.info(f" Google XML úspěšně parsováno: {xml_path}")
             return root
@@ -564,7 +726,7 @@ class HeurekaXMLParser(XMLFeedParser):
     def parse_xml(self, xml_path: str) -> Optional[ET.Element]:
         """Parsování Heureka XML feedu."""
         try:
-            tree = ET.parse(xml_path)
+            tree = safe_xml_parse(xml_path)
             root = tree.getroot()
             self.logger.info(f" Heureka XML úspěšně parsováno: {xml_path}")
             return root
@@ -690,10 +852,13 @@ class ShoptetScraper:
         """
         try:
             parsed = urlparse(url)
-            return (
+            # SSRF ochrana je skutečným garantem; doménová heuristika je jen
+            # zachování očekávání, že jde o Shoptet feed.
+            return bool(
                 parsed.scheme in ['http', 'https'] and
                 parsed.netloc and
-                ('shoptet' in parsed.netloc or 'universal.xml' in url)
+                ('shoptet' in parsed.netloc or 'universal.xml' in url) and
+                is_safe_url(url)
             )
         except Exception:
             return False
@@ -822,15 +987,15 @@ class ShoptetScraper:
         """
         index, img_url, product_no, product_name = data
         try:
-            response = self.session.get(img_url, timeout=10)
-            response.raise_for_status()
-            
-            # Potlačení PIL warnings
-            import warnings
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                image = PILImage.open(BytesIO(response.content))
-            
+            image_bytes = download_image_bytes(self.session, img_url, timeout=10)
+            if image_bytes is None:
+                self.logger.error(f" Odmítnuta nebezpečná URL obrázku: {img_url}")
+                return None
+
+            # MAX_IMAGE_PIXELS limit je aktivní globálně; DecompressionBombWarning
+            # i Error NEpotlačujeme, aby se bomby projevily.
+            image = PILImage.open(BytesIO(image_bytes))
+
             # Konverze na RGB s lepším zpracováním průhlednosti
             if image.mode == 'P':
                 # Palette s průhledností -> RGBA -> RGB s bílým pozadím
@@ -912,6 +1077,7 @@ class ShoptetScraper:
                     if index - 1 < len(shopitems):
                         shopitem = shopitems[index - 1]
                         row = self.xml_parser.extract_product_data(shopitem, product_no, image_filename)
+                        row = [sanitize_xlsx_value(cell) for cell in row]
                         wb.active.append(row)
                         product_counter += 1
                         
@@ -1094,9 +1260,12 @@ def download_and_save_image(data, session, images_folder):
     """
     index, img_url, product_no, product_name = data
     try:
-        response = session.get(img_url, timeout=10)
-        response.raise_for_status()
-        image = PILImage.open(BytesIO(response.content))
+        image_bytes = download_image_bytes(session, img_url, timeout=10)
+        if image_bytes is None:
+            print(f"Rejected unsafe image URL: {img_url}")
+            return None
+        # MAX_IMAGE_PIXELS limit aktivní globálně; warning nepotlačujeme.
+        image = PILImage.open(BytesIO(image_bytes))
         # Konverze na RGB, pokud je to potřeba
         if image.mode in ('RGBA', 'P', 'CMYK'):
             image = image.convert('RGB')

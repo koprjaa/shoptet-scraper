@@ -4,3 +4,6 @@ Pillow>=9.0.0
 tqdm>=4.64.0
 urllib3>=1.26.0
 beautifulsoup4>=4.11.0
+# Optional: hardens XML parsing against entity expansion / XXE.
+# If absent, the parser rejects XML containing DOCTYPE/ENTITY instead.
+defusedxml>=0.7.1
