@@ -169,3 +169,9 @@ Thumbs.db
 *.temp
 temp/
 tmp/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+uv.lock
+.venv/

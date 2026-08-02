@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "shoptet-scraper"
+version = "1.0.0"
+description = "Find the product feeds of a Shoptet shop, parse them into Excel and download the images."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Jan Alexandr Kopřiva", email = "jan.alexandr.kopriva@gmail.com" }]
+keywords = ["shoptet", "scraper", "ecommerce", "xml-feed", "czech"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+]
+dependencies = [
+    "requests>=2.32",
+    "openpyxl>=3.1",
+    "Pillow>=11.0",
+    "beautifulsoup4>=4.12",
+    "tqdm>=4.66",
+    "urllib3>=2.0",
+    "defusedxml>=0.7.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff==0.16.1"]
+
+[project.urls]
+Homepage = "https://github.com/koprjaa/shoptet-scraper"
+Repository = "https://github.com/koprjaa/shoptet-scraper"
+Issues = "https://github.com/koprjaa/shoptet-scraper/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/shoptet_scraper"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "N", "SIM", "C4", "RET", "PTH", "TRY", "PERF", "RUF"]
+# E501  line length is handled by the formatter, not worth failing CI over
+# TRY003 wants one exception subclass per message. That is ceremony for a
+#        message a reader needs, so informative raises stay.
+ignore = ["E501", "TRY003"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+pythonpath = ["src", "."]
+addopts = "-q --strict-markers"

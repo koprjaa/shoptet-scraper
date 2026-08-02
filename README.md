@@ -5,6 +5,7 @@ Finds the product feeds of a Shoptet online shop, parses them into Excel files, 
 ![python](https://img.shields.io/badge/python-3.8+-3776AB?style=flat-square&logo=python&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-A31F34?style=flat-square)
 ![status](https://img.shields.io/badge/status-active-22863A?style=flat-square)
+[![ci](https://github.com/koprjaa/shoptet-scraper/actions/workflows/ci.yml/badge.svg)](https://github.com/koprjaa/shoptet-scraper/actions/workflows/ci.yml)
 
 ## What it does
 
@@ -59,20 +60,32 @@ output/2026-04-17_001/
 ## How it works
 
 ```
-ShoptetStoreDiscovery   Resolves the URL to a canonical Shoptet domain and probes the five paths.
-XMLFeedParser           One concrete parser per feed format.
-OutputManager           Session folders and the Excel writer.
-ThreadPoolExecutor      Parallel image download.
+src/shoptet_scraper/security.py   URL checks, size limits, XML and file name sanitizing
+src/shoptet_scraper/feeds.py      Feed definitions and the parser
+main.py                           Discovery, Excel output, image download, CLI
 ```
 
-The tool streams each feed and splits the rows into chunks, because Excel holds one million rows per sheet. The parsers subclass one abstract class, so a sixth feed format costs about 50 lines.
+One parser reads every feed. Google Shopping names its fields `id`, `title` and `image_link`, the Czech comparison sites use `PRODUCTNO`, `PRODUCT` and `IMGURL`, and the parser tries each spelling in turn. A sixth format costs one entry in `XML_FEED_TYPES` plus the tag names it uses.
+
+The tool streams each feed and splits the rows into chunks, because Excel holds one million rows per sheet.
+
+Two checks guard the trust boundary. Every outgoing URL is resolved and refused when it points at a private, loopback or link-local address, so a shop cannot aim the scraper at the machine it runs on. Product names are quoted before they reach the spreadsheet, so a name beginning with `=` is not run as a formula.
 
 ## Limits
 
 - No resume. A crash leaves a half filled session folder. Delete it and run again.
 - The image download has no bandwidth limit. A shop with tens of thousands of products can trigger rate limiting at the origin.
 - Discovery assumes the current Shoptet URL convention. A custom template that moves the feed paths fails.
-- No tests.
+- The hostname is resolved once for the safety check and again by the HTTP library. A name whose answer changes between the two can still slip through. Closing that needs the connection pinned to the address that was checked.
+
+## Development
+
+```bash
+uv run --extra dev ruff check .
+uv run --extra dev pytest -q
+```
+
+The suite covers the feed parsing and the safety checks with no network. CI runs both on Python 3.10, 3.11, and 3.12, on Linux and Windows.
 
 ## License
 
