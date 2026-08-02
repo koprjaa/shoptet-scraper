@@ -1,3 +1,17 @@
+#
+# Project: shoptet-scraper
+# File:    main.py
+#
+# Description:
+# Command line scraper: finds Shoptet shops, reads their product feeds, and writes an Excel workbook with the product images.
+#
+# Author:
+# Jan Alexandr Kopřiva
+# jan.alexandr.kopriva@gmail.com
+#
+# License: MIT
+#
+
 import argparse
 import logging
 import sys
@@ -24,28 +38,16 @@ from shoptet_scraper.security import (
     sanitize_xlsx_value,
 )
 
-# Typy XML feedů podporované Shoptetem
-
-# Žádné hardcodované obchody - vše se objevuje dynamicky
-
 
 class ProductImageScraper:
-    """
-    Třída pro stahování všech obrázků z galerie produktů.
-    """
+    """Reads every gallery image off a product page."""
 
     def __init__(self, logger: logging.Logger):
-        """
-        Inicializace scraperu obrázků produktů.
-
-        Args:
-            logger: Logger instance
-        """
         self.logger = logger
         self.session = self._create_session()
 
     def _create_session(self) -> requests.Session:
-        """Vytvoření session s retry mechanizmem."""
+        """Session that retries on the status codes worth retrying."""
         session = requests.Session()
         retry = Retry(
             total=3,
@@ -58,7 +60,6 @@ class ProductImageScraper:
         session.mount('http://', adapter)
         session.mount('https://', adapter)
 
-        # Nastavení výchozích headers
         session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         })
@@ -66,18 +67,14 @@ class ProductImageScraper:
         return session
 
     def extract_all_product_images(self, product_url: str) -> list[tuple[str, str]]:
-        """
-        Extrakce všech obrázků z galerie produktu.
+        """Every gallery image on a product page, as (url, alt text).
 
-        Args:
-            product_url: URL stránky produktu
-
-        Returns:
-            Seznam tuple (image_url, alt_text) pro všechny obrázky
+        The page serves each image at three sizes. Only the /orig/ one is kept,
+        so the saved file is the full resolution the shop holds.
         """
         try:
             if not is_safe_url(product_url):
-                self.logger.error(f" Odmítnuta nebezpečná URL produktu: {product_url}")
+                self.logger.error(f" Refused unsafe product URL: {product_url}")
                 return []
 
             response = self.session.get(product_url, timeout=15)
@@ -86,62 +83,54 @@ class ProductImageScraper:
             soup = BeautifulSoup(response.content, 'html.parser')
             images = []
 
-            # Hledání hlavního obrázku
             main_image = soup.find('a', class_='p-main-image')
             if main_image:
                 img_url = main_image.get('href')
                 if img_url:
-                    # Konverze z /big/ na /orig/ pro nejvyšší kvalitu
                     orig_url = img_url.replace('/big/', '/orig/')
                     alt_text = main_image.find('img').get('alt', '') if main_image.find('img') else ''
                     images.append((orig_url, alt_text))
 
-            # Hledání obrázků v galerii miniatur
             thumbnails = soup.find_all('a', class_='p-thumbnail')
             for thumbnail in thumbnails:
                 img_url = thumbnail.get('href')
-                if img_url and img_url not in [img[0] for img in images]:  # Vyhnutí se duplicitám
-                    # Konverze z /big/ na /orig/ pro nejvyšší kvalitu
+                if img_url and img_url not in [img[0] for img in images]:
                     orig_url = img_url.replace('/big/', '/orig/')
                     alt_text = thumbnail.find('img').get('alt', '') if thumbnail.find('img') else ''
                     images.append((orig_url, alt_text))
 
-            # Alternativní hledání pomocí data-src atributů
+            # Lazy loaded images carry the URL in data-src only, so neither lookup
+            # above finds them.
             data_src_images = soup.find_all('img', {'data-src': True})
             for img in data_src_images:
                 data_src = img.get('data-src')
                 if data_src and '/related/' in data_src:
-                    # Konverze z /related/ na /orig/ pro nejvyšší kvalitu
                     orig_url = data_src.replace('/related/', '/orig/')
                     alt_text = img.get('alt', '')
-                    if orig_url not in [img[0] for img in images]:  # Vyhnutí se duplicitám
+                    if orig_url not in [img[0] for img in images]:
                         images.append((orig_url, alt_text))
 
         except Exception:
-            self.logger.exception(f" Chyba při extrakci obrázků z {product_url}")
+            self.logger.exception(f" Could not read images from {product_url}")
             return []
         else:
-            self.logger.info(f" Nalezeno {len(images)} obrázků pro produkt: {product_url}")
+            self.logger.info(f" Found {len(images)} images for product: {product_url}")
             return images
 
 
 class ShoptetStoreDiscovery:
-    """
-    Třída pro dynamické objevování Shoptet obchodů.
+    """Works out whether a URL is a Shoptet shop.
+
+    No shop is hard coded. Every one is discovered at run time by asking the
+    candidate URL for a feed.
     """
 
     def __init__(self, logger: logging.Logger):
-        """
-        Inicializace discovery třídy.
-
-        Args:
-            logger: Logger instance
-        """
         self.logger = logger
         self.session = self._create_session()
 
     def _create_session(self) -> requests.Session:
-        """Vytvoření session s retry mechanizmem."""
+        """Session that retries on the status codes worth retrying."""
         session = requests.Session()
         retry = Retry(
             total=3,
@@ -154,7 +143,6 @@ class ShoptetStoreDiscovery:
         session.mount('http://', adapter)
         session.mount('https://', adapter)
 
-        # Nastavení výchozích headers
         session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         })
@@ -162,28 +150,17 @@ class ShoptetStoreDiscovery:
         return session
 
     def discover_store_from_url(self, base_url: str) -> dict[str, str] | None:
-        """
-        Objevení Shoptet obchodu z URL.
-
-        Args:
-            base_url: Základní URL obchodu
-
-        Returns:
-            Konfigurace obchodu nebo None
-        """
+        """Shop configuration for a URL, or None when it is not a Shoptet shop."""
         try:
             parsed = urlparse(base_url)
             if not parsed.scheme or not parsed.netloc:
                 return None
 
-            # Vyčištění URL
             clean_url = f"{parsed.scheme}://{parsed.netloc}"
 
-            # Kontrola, zda je to Shoptet obchod
             if not self._is_shoptet_store(clean_url):
                 return None
 
-            # Vytvoření názvu obchodu z URL
             store_name = parsed.netloc.replace('.shoptet.cz', '').replace('.cz', '').replace('www.', '')
             store_key = store_name.replace('-', '_').replace('.', '_')
 
@@ -195,26 +172,21 @@ class ShoptetStoreDiscovery:
             }
 
         except Exception:
-            self.logger.exception(f" Chyba při objevování obchodu {base_url}")
+            self.logger.exception(f" Could not inspect shop {base_url}")
             return None
 
     def _is_shoptet_store(self, url: str) -> bool:
-        """
-        Kontrola, zda je URL Shoptet obchod.
+        """True when the URL serves a Shoptet feed.
 
-        Args:
-            url: URL k ověření
-
-        Returns:
-            True pokud je to Shoptet obchod
+        Tries each known feed path, then falls back to looking for the Shoptet
+        name on the home page.
         """
         try:
-            # SSRF ochrana: odmítnutí neveřejných cílů.
+            # A shop URL arrives from outside, so it is checked before any request.
             if not is_safe_url(url):
-                self.logger.warning(f" Odmítnuta nebezpečná URL obchodu: {url}")
+                self.logger.warning(f" Refused unsafe shop URL: {url}")
                 return False
 
-            # Kontrola některého z XML feedů
             test_urls = [
                 f"{url}/universal.xml",
                 f"{url}/google.xml",
@@ -223,59 +195,51 @@ class ShoptetStoreDiscovery:
 
             for test_url in test_urls:
                 try:
-                    # Zvýšení timeoutu na 15 sekund a použití GET místo HEAD
+                    # GET rather than HEAD: some shops answer HEAD with 405, and the
+                    # body is needed anyway when the content type is not set.
                     response = self.session.get(test_url, timeout=15, stream=True)
                     if response.status_code == 200:
-                        # Kontrola, zda obsahuje XML hlavičku nebo Shoptet značky
                         content_type = response.headers.get('content-type', '').lower()
                         if 'xml' in content_type or 'text/xml' in content_type:
-                            self.logger.info(f" Shoptet obchod nalezen: {url} (feed: {test_url})")
+                            self.logger.info(f" Shoptet shop found: {url} (feed: {test_url})")
                             return True
 
-                        # Alternativní kontrola - načtení prvních 500 bytů pro kontrolu XML obsahu
+                        # Content type was no help, so look at the start of the body.
                         try:
                             content_preview = response.content[:500].decode('utf-8', errors='ignore')
                             if '<?xml' in content_preview or '<SHOP' in content_preview or '<rss' in content_preview:
-                                self.logger.info(f" Shoptet obchod nalezen: {url} (XML obsah detekován)")
+                                self.logger.info(f" Shoptet shop found: {url} (XML body detected)")
                                 return True
                         except UnicodeDecodeError:
                             # Binary body, so it is not one of the XML feeds.
                             pass
 
                 except Exception as e:  # noqa: PERF203 - one probe per feed URL, the cost is the request
-                    self.logger.debug(f" Test URL {test_url} selhal: {e}")
+                    self.logger.debug(f" Probe {test_url} failed: {e}")
                     continue
 
-            # Fallback: kontrola hlavní stránky pro Shoptet značky
+            # No feed answered. The home page still names the platform.
             try:
                 response = self.session.get(url, timeout=10)
                 if response.status_code == 200:
                     content = response.text.lower()
                     if 'shoptet' in content or 'shoptet.cz' in content:
-                        self.logger.info(f" Shoptet obchod nalezen: {url} (Shoptet značky na hlavní stránce)")
+                        self.logger.info(f" Shoptet shop found: {url} (named on the home page)")
                         return True
             except Exception as e:
-                self.logger.debug(f" Fallback kontrola hlavní stránky selhala: {e}")
+                self.logger.debug(f" Home page check failed: {e}")
 
             return False  # noqa: TRY300 - guarded on purpose, the happy path stays in the try
 
         except Exception as e:
-            self.logger.debug(f" Chyba při kontrole Shoptet obchodu {url}: {e}")
+            self.logger.debug(f" Could not check shop {url}: {e}")
             return False
 
     def discover_stores_from_list(self, url_list: list[str]) -> dict[str, dict[str, str]]:
-        """
-        Objevení více obchodů ze seznamu URL.
-
-        Args:
-            url_list: Seznam URL k testování
-
-        Returns:
-            Slovník nalezených obchodů
-        """
+        """Shop configurations for every URL in the list that is a Shoptet shop."""
         discovered_stores = {}
 
-        self.logger.info(f" Objevování Shoptet obchodů z {len(url_list)} URL...")
+        self.logger.info(f" Checking {len(url_list)} URLs for Shoptet shops...")
 
         for url in url_list:
             store_config = self.discover_store_from_url(url)
@@ -283,24 +247,15 @@ class ShoptetStoreDiscovery:
                 store_key = store_config['store_key']
                 discovered_stores[store_key] = store_config
 
-        self.logger.info(f" Nalezeno {len(discovered_stores)} Shoptet obchodů")
+        self.logger.info(f" Found {len(discovered_stores)} Shoptet shops")
         return discovered_stores
 
 
 class OutputManager:
-    """
-    Třída pro správu výstupních složek s číslováním.
-    """
+    """Numbered output folders, one per run, grouped by date."""
 
     def __init__(self, base_path: str | None = None):
-        """
-        Inicializace output manageru.
-
-        Args:
-            base_path: Základní cesta pro výstupy (default: ./output)
-        """
         if base_path is None:
-            # Uložení do kořenové složky projektu
             base_path = str(Path(__file__).resolve().parent / 'output')
 
         self.base_path = base_path
@@ -308,13 +263,7 @@ class OutputManager:
         self.session_path = self._create_session_path()
 
     def _create_session_path(self) -> str:
-        """
-        Vytvoření cesty pro aktuální session s číslováním.
-
-        Returns:
-            Cesta k session složce
-        """
-        # Najít nejvyšší číslo pro dnešní datum
+        """Path for this run: today's date plus the first unused sequence number."""
         session_number = 1
         while True:
             session_folder = f"{self.today}_{session_number:03d}"
@@ -324,47 +273,25 @@ class OutputManager:
                 break
             session_number += 1
 
-        # Vytvoření složky
         Path(session_path).mkdir(parents=True, exist_ok=True)
         return session_path
 
     def get_store_path(self, store_name: str) -> str:
-        """
-        Vytvoření cesty pro konkrétní obchod.
-
-        Args:
-            store_name: Název obchodu
-
-        Returns:
-            Cesta k složce obchodu
-        """
-        # Sanitizace názvu obchodu
+        """Folder for one shop inside this run. The shop name comes from the shop,
+        so it goes through sanitize_filename first."""
         safe_name = sanitize_filename(store_name)
         store_path = str(Path(self.session_path) / safe_name)
         Path(store_path).mkdir(parents=True, exist_ok=True)
         return store_path
 
     def get_images_path(self, store_path: str) -> str:
-        """
-        Vytvoření cesty pro obrázky obchodu.
-
-        Args:
-            store_path: Cesta k složce obchodu
-
-        Returns:
-            Cesta k složce obrázků
-        """
+        """Image folder inside one shop's folder."""
         images_path = str(Path(store_path) / 'images')
         Path(images_path).mkdir(parents=True, exist_ok=True)
         return images_path
 
     def get_session_info(self) -> dict[str, str]:
-        """
-        Získání informací o aktuální session.
-
-        Returns:
-            Slovník s informacemi o session
-        """
+        """Where this run writes, and for which date."""
         return {
             'session_path': self.session_path,
             'date': self.today,
@@ -374,7 +301,7 @@ class OutputManager:
 
 
 def setup_logging():
-    """Nastavení logging systému podle preferencí uživatele."""
+    """Log to the console and to shoptet_scraper.log."""
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -387,24 +314,10 @@ def setup_logging():
 
 
 class ShoptetScraper:
-    """
-    Univerzální scraper pro Shoptet obchody.
-
-    Podporuje stahování různých typů XML feedů z libovolného Shoptet obchodu,
-    zpracování produktů a export do Excel souborů s obrázky.
-    """
+    """One shop, one feed type: download it, read it, and write the workbook."""
 
     def __init__(self, store_config: dict[str, str], feed_type: str, logger: logging.Logger,
                  scrape_all_images: bool = False):
-        """
-        Inicializace scraperu.
-
-        Args:
-            store_config: Konfigurace obchodu z SHOPTET_STORES
-            feed_type: Typ XML feedu z XML_FEED_TYPES
-            logger: Logger instance
-            scrape_all_images: Zda stahovat všechny obrázky z galerie produktů
-        """
         self.store_config = store_config
         self.feed_type = feed_type
         self.feed_config = XML_FEED_TYPES[feed_type]
@@ -415,7 +328,8 @@ class ShoptetScraper:
         self.image_scraper = ProductImageScraper(logger) if scrape_all_images else None
 
     def _create_session(self) -> requests.Session:
-        """Vytvoření session s retry mechanizmem."""
+        """Session for the feed and the images, with a pool wide enough for the
+        50 image workers."""
         session = requests.Session()
         retry = Retry(
             total=5,
@@ -424,7 +338,6 @@ class ShoptetScraper:
             backoff_factor=0.5,
             status_forcelist=(500, 502, 504),
         )
-        # Zvýšení velikosti connection poolu pro paralelní stahování
         adapter = HTTPAdapter(
             max_retries=retry,
             pool_connections=100,
@@ -435,19 +348,11 @@ class ShoptetScraper:
         return session
 
     def validate_url(self, url: str) -> bool:
-        """
-        Validace URL pro Shoptet XML feed.
-
-        Args:
-            url: URL k validaci
-
-        Returns:
-            True pokud je URL validní, False jinak
-        """
+        """True when the URL is safe to request and looks like a Shoptet feed."""
         try:
             parsed = urlparse(url)
-            # SSRF ochrana je skutečným garantem; doménová heuristika je jen
-            # zachování očekávání, že jde o Shoptet feed.
+            # is_safe_url is what actually blocks a hostile target. The name check
+            # below it only keeps the tool pointed at Shoptet feeds.
             return bool(
                 parsed.scheme in ['http', 'https'] and
                 parsed.netloc and
@@ -458,29 +363,19 @@ class ShoptetScraper:
             return False
 
     def download_xml(self, save_path: str) -> str | None:
-        """
-        Stažení XML feedu z obchodu.
-
-        Args:
-            save_path: Cesta pro uložení XML souboru
-
-        Returns:
-            Cesta k staženému XML souboru nebo None při chybě
-        """
-        # Sestavení URL pro konkrétní typ feedu
+        """Download the feed to save_path. None when it cannot be fetched."""
         xml_url = f"{self.store_config['base_url'].rstrip('/')}{self.feed_config['path']}"
 
         if not self.validate_url(xml_url):
-            self.logger.error(f" Neplatná URL: {xml_url}")
+            self.logger.error(f" Invalid URL: {xml_url}")
             return None
 
-        self.logger.info(f" Stahování {self.feed_config['name']} z: {xml_url}")
+        self.logger.info(f" Downloading {self.feed_config['name']} from: {xml_url}")
 
         try:
             response = self.session.get(xml_url, stream=True, timeout=30)
             response.raise_for_status()
 
-            # Vytvoření názvu souboru
             today = datetime.now().strftime('%d-%m-%Y')
             xml_filename = f"{self.store_config['feed_filename']}_{self.feed_type}_{today}.xml"
             full_xml_path = str(Path(save_path) / xml_filename)
@@ -499,55 +394,34 @@ class ShoptetScraper:
                         file.write(chunk)
                         t.update(len(chunk))
 
-            self.logger.info(f" {self.feed_config['name']} úspěšně staženo: {full_xml_path}")
+            self.logger.info(f" {self.feed_config['name']} downloaded: {full_xml_path}")
             return full_xml_path  # noqa: TRY300 - the log line belongs with the value it reports
 
         except Exception:
-            self.logger.exception(f" Chyba při stahování {self.feed_config['name']}")
+            self.logger.exception(f" Could not download {self.feed_config['name']}")
             return None
 
     def parse_xml(self, xml_path: str) -> ET.Element | None:
-        """
-        Parsování XML souboru pomocí příslušného parseru.
-
-        Args:
-            xml_path: Cesta k XML souboru
-
-        Returns:
-            Root element XML nebo None při chybě
-        """
+        """Root element of the downloaded feed, or None when it will not parse."""
         return self.xml_parser.parse_xml(xml_path)
 
     def extract_image_data(self, root: ET.Element) -> list[tuple[int, str, str, str]]:
-        """
-        Extrakce dat obrázků z XML pomocí příslušného parseru.
+        """Image rows from the feed.
 
-        Args:
-            root: Root element XML
-
-        Returns:
-            Seznam tuple (index, img_url, product_no, product_name)
+        The feed lists one image per product. With scrape_all_images the product
+        pages are fetched as well, which is far slower but gets the whole gallery.
         """
         if not self.scrape_all_images:
             return self.xml_parser.extract_image_data(root)
 
-        # Rozšířená extrakce pro všechny obrázky z galerie
         return self._extract_all_product_images(root)
 
     def _extract_all_product_images(self, root: ET.Element) -> list[tuple[int, str, str, str]]:
-        """
-        Extrakce všech obrázků z galerie produktů.
-
-        Args:
-            root: Root element XML
-
-        Returns:
-            Seznam tuple (index, img_url, product_no, product_name)
-        """
+        """Gallery images for every product, one request per product page."""
         all_images = []
         shopitems = root.findall('.//SHOPITEM')
 
-        self.logger.info(f" Extrakce všech obrázků z {len(shopitems)} produktů...")
+        self.logger.info(f" Reading galleries for {len(shopitems)} products...")
 
         for index, shopitem in enumerate(shopitems, start=1):
             product_url = shopitem.findtext('URL', default='')
@@ -557,66 +431,51 @@ class ShoptetScraper:
             if not product_url:
                 continue
 
-            # Extrakce všech obrázků z galerie produktu
             product_images = self.image_scraper.extract_all_product_images(product_url)
 
             for img_index, (img_url, _alt_text) in enumerate(product_images):
-                # Vytvoření jedinečného indexu pro každý obrázek
+                # Product index and image index together, so two images of one
+                # product cannot overwrite each other's file.
                 unique_index = f"{index}_{img_index + 1}"
                 all_images.append((unique_index, img_url, product_no, product_name))
 
-        self.logger.info(f" Nalezeno celkem {len(all_images)} obrázků z galerií produktů")
+        self.logger.info(f" Found {len(all_images)} gallery images in total")
         return all_images
 
     def download_and_save_image(self, data: tuple[int, str, str, str], images_folder: str) -> str | None:
-        """
-        Stažení a uložení obrázku jako .jpg.
-
-        Args:
-            data: tuple (index, img_url, product_no, product_name)
-            images_folder: Složka pro uložení obrázků
-
-        Returns:
-            Název souboru obrázku nebo None při chybě
-        """
+        """Fetch one image and write it as JPEG. None when it cannot be used."""
         index, img_url, product_no, product_name = data
         try:
             image_bytes = download_image_bytes(self.session, img_url, timeout=10)
             if image_bytes is None:
-                self.logger.error(f" Odmítnuta nebezpečná URL obrázku: {img_url}")
+                self.logger.error(f" Refused unsafe image URL: {img_url}")
                 return None
 
-            # MAX_IMAGE_PIXELS limit je aktivní globálně; DecompressionBombWarning
-            # i Error NEpotlačujeme, aby se bomby projevily.
+            # security.py caps MAX_IMAGE_PIXELS. The warning and the error are both
+            # left to surface: a decompression bomb has to be visible, not swallowed.
             image = PILImage.open(BytesIO(image_bytes))
 
-            # Konverze na RGB s lepším zpracováním průhlednosti
+            # JPEG has no alpha, and a straight convert('RGB') renders transparent
+            # pixels black. Compositing onto white keeps the product on the
+            # background the shop intended.
             if image.mode == 'P':
-                # Palette s průhledností -> RGBA -> RGB s bílým pozadím
                 image = image.convert('RGBA')
-                # Vytvoření bílého pozadí pro RGBA obrázky
                 background = PILImage.new('RGB', image.size, (255, 255, 255))
-                background.paste(image, mask=image.split()[-1])  # Použije alpha kanál jako masku
+                background.paste(image, mask=image.split()[-1])
                 image = background
             elif image.mode == 'RGBA':
-                # RGBA -> RGB s bílým pozadím
                 background = PILImage.new('RGB', image.size, (255, 255, 255))
-                background.paste(image, mask=image.split()[-1])  # Použije alpha kanál jako masku
+                background.paste(image, mask=image.split()[-1])
                 image = background
-            elif image.mode == 'CMYK':
-                image = image.convert('RGB')
             elif image.mode not in ('RGB', 'L'):
-                # Jiné módy -> RGB
                 image = image.convert('RGB')
 
-            # Sanitizace názvu souboru a přidání indexu pro jedinečnost
+            # The name comes from the shop, so it goes through sanitize_filename.
             sanitized_name = sanitize_filename(product_name)
             sanitized_product_no = sanitize_filename(product_no)
             image_filename = f"{sanitized_name}_{sanitized_product_no}_{index}.jpg"
             image_path = str(Path(images_folder) / image_filename)
 
-            # Uložení obrázku jako JPEG s kvalitou 85
-            # Zajištění, že obrázek je v RGB módu před uložením
             if image.mode != 'RGB':
                 image = image.convert('RGB')
 
@@ -624,19 +483,15 @@ class ShoptetScraper:
             return image_filename  # noqa: TRY300 - guarded on purpose, the happy path stays in the try
 
         except Exception:
-            self.logger.exception(f" Chyba při stahování obrázku {img_url}")
+            self.logger.exception(f" Could not download image {img_url}")
             return None
 
     def process_products(self, root: ET.Element, image_data: list[tuple[int, str, str, str]],
                         images_folder: str, save_path: str) -> None:
-        """
-        Zpracování produktů a vytvoření Excel souborů.
+        """Download the images and write the products to workbooks.
 
-        Args:
-            root: Root element XML
-            image_data: Seznam dat obrázků
-            images_folder: Složka pro obrázky
-            save_path: Cesta pro uložení Excel souborů
+        Split every 1000 rows. Excel copes with more, but the files are opened by
+        hand and a smaller part loads in reasonable time.
         """
         headers = self.xml_parser.get_headers()
 
@@ -644,7 +499,7 @@ class ShoptetScraper:
         part_number = 1
         product_counter = 0
 
-        # Najít všechny produkty podle typu feedu
+        # The Google feed wraps products in <item>, the others in <SHOPITEM>.
         if self.feed_type == 'google':
             shopitems = root.findall('.//item') or root.findall('.//SHOPITEM')
         else:
@@ -652,9 +507,8 @@ class ShoptetScraper:
 
         total_images = len(image_data)
 
-        self.logger.info(f" Zpracovávání {total_images} obrázků z {self.feed_config['name']}")
+        self.logger.info(f" Processing {total_images} images from {self.feed_config['name']}")
 
-        # Paralelní stahování obrázků
         max_workers = 50
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
@@ -667,7 +521,7 @@ class ShoptetScraper:
                     index, _img_url, product_no, _product_name = futures[future]
                     image_filename = future.result()
 
-                    # Najít odpovídající shopitem pomocí indexu
+                    # image_data was built from shopitems in order, so the index maps back.
                     if index - 1 < len(shopitems):
                         shopitem = shopitems[index - 1]
                         row = self.xml_parser.extract_product_data(shopitem, product_no, image_filename)
@@ -683,67 +537,47 @@ class ShoptetScraper:
 
                     pbar.update(1)
 
-        # Uložení poslední části
+        # Whatever is left below the 1000 row split.
         if product_counter % 1000 != 0:
             base_filename = f"{self.store_config['feed_filename']}_{self.feed_type}_{datetime.now().strftime('%d-%m-%Y')}"
             save_workbook(wb, save_path, base_filename, part_number)
 
-        self.logger.info(f" {self.feed_config['name']} zpracován úspěšně ({product_counter} produktů)")
+        self.logger.info(f" {self.feed_config['name']} done ({product_counter} products)")
 
     def cleanup_xml(self, xml_path: str) -> None:
-        """
-        Smazání XML souboru po zpracování.
-
-        Args:
-            xml_path: Cesta k XML souboru
-        """
+        """Delete the downloaded feed once the workbook is written."""
         try:
             Path(xml_path).unlink()
-            self.logger.info(f" XML soubor smazán: {xml_path}")
+            self.logger.info(f" Feed file deleted: {xml_path}")
         except Exception:
-            self.logger.exception(" Chyba při mazání XML souboru: ")
+            self.logger.exception(" Could not delete the feed file")
 
     def check_xml_availability(self) -> bool:
-        """
-        Kontrola dostupnosti XML feedu pro tento obchod a typ feedu.
-
-        Returns:
-            True pokud je XML dostupný, False jinak
-        """
+        """True when this shop serves this feed type."""
         xml_url = f"{self.store_config['base_url'].rstrip('/')}{self.feed_config['path']}"
 
         try:
             response = self.session.head(xml_url, timeout=10)
             is_available = response.status_code == 200
             if is_available:
-                self.logger.info(f" {self.feed_config['name']} dostupný: {xml_url}")
+                self.logger.info(f" {self.feed_config['name']} available: {xml_url}")
             else:
-                self.logger.warning(f" {self.feed_config['name']} nedostupný (status {response.status_code}): {xml_url}")
+                self.logger.warning(f" {self.feed_config['name']} unavailable (status {response.status_code}): {xml_url}")
             return is_available  # noqa: TRY300 - guarded on purpose, the happy path stays in the try
         except Exception as e:
-            self.logger.warning(f" {self.feed_config['name']} nedostupný ({e}): {xml_url}")
+            self.logger.warning(f" {self.feed_config['name']} unavailable ({e}): {xml_url}")
             return False
 
 
 def check_xml_feeds_for_stores(discovered_stores: dict[str, dict[str, str]],
                                logger: logging.Logger) -> dict[str, dict[str, str]]:
-    """
-    Kontrola dostupnosti XML feedů pro objevené obchody.
-
-    Args:
-        discovered_stores: Slovník objevených obchodů
-        logger: Logger instance
-
-    Returns:
-        Slovník dostupných obchodů s dostupnými feedy
-    """
-    logger.info(" Kontrola dostupnosti XML feedů...")
+    """Which feed types each discovered shop actually serves."""
+    logger.info(" Checking which feeds are available...")
     available_stores = {}
 
     for store_key, store_config in discovered_stores.items():
         store_feeds = {}
 
-        # Kontrola všech typů feedů pro tento obchod
         for feed_type, feed_config in XML_FEED_TYPES.items():
             scraper = ShoptetScraper(store_config, feed_type, logger)
             if scraper.check_xml_availability():
@@ -755,20 +589,12 @@ def check_xml_feeds_for_stores(discovered_stores: dict[str, dict[str, str]],
                 'available_feeds': store_feeds
             }
 
-    logger.info(f" Nalezeno {len(available_stores)} obchodů s dostupnými feedy")
+    logger.info(f" {len(available_stores)} shops serve at least one feed")
     return available_stores
 
 
 def show_available_stores(available_stores: dict[str, dict[str, str]]) -> tuple[str, str] | None:
-    """
-    Zobrazení dostupných obchodů a výběr obchodu s typem feedu.
-
-    Args:
-        available_stores: Slovník dostupných obchodů s feedy
-
-    Returns:
-        Tuple (store_key, feed_type) nebo None
-    """
+    """Ask which shop and feed to scrape. None when the user quits."""
     if not available_stores:
         print(" Žádné dostupné obchody nenalezeny!")
         return None
@@ -796,7 +622,7 @@ def show_available_stores(available_stores: dict[str, dict[str, str]]) -> tuple[
                 store_key, store_data = store_list[choice_num - 1]
                 available_feeds = store_data['available_feeds']
 
-                # Výběr typu feedu
+                # One feed means no second question worth asking.
                 if len(available_feeds) == 1:
                     feed_type = next(iter(available_feeds))
                     print(f" Automaticky vybrán {available_feeds[feed_type]['name']}")
@@ -821,7 +647,7 @@ def show_available_stores(available_stores: dict[str, dict[str, str]]) -> tuple[
 
 
 def requests_retry_session(retries=5, backoff_factor=0.5, status_forcelist=(500, 502, 504)):
-    """Vytvoření session s retry mechanizmem."""
+    """Session that retries on the status codes worth retrying."""
     session = requests.Session()
     retry = Retry(
         total=retries,
@@ -839,27 +665,22 @@ def requests_retry_session(retries=5, backoff_factor=0.5, status_forcelist=(500,
 
 
 def download_and_save_image(data, session, images_folder):
-    """
-    Stažení a uložení obrázku jako .jpg.
-    data: tuple (index, img_url, product_no, product_name)
-    """
+    """Fetch one image and write it as JPEG. None when it cannot be used."""
     index, img_url, product_no, product_name = data
     try:
         image_bytes = download_image_bytes(session, img_url, timeout=10)
         if image_bytes is None:
             print(f"Rejected unsafe image URL: {img_url}")
             return None
-        # MAX_IMAGE_PIXELS limit aktivní globálně; warning nepotlačujeme.
+        # security.py caps MAX_IMAGE_PIXELS. The warning is left to surface.
         image = PILImage.open(BytesIO(image_bytes))
-        # Konverze na RGB, pokud je to potřeba
         if image.mode in ('RGBA', 'P', 'CMYK'):
             image = image.convert('RGB')
-        # Sanitizace názvu souboru a přidání indexu pro jedinečnost
+        # The name comes from the shop, so it goes through sanitize_filename.
         sanitized_name = sanitize_filename(product_name)
         sanitized_product_no = sanitize_filename(product_no)
         image_filename = f"{sanitized_name}_{sanitized_product_no}_{index}.jpg"
         image_path = str(Path(images_folder) / image_filename)
-        # Uložení obrázku jako JPEG s kvalitou 85
         image.save(image_path, format='JPEG', quality=85)
         return image_filename  # noqa: TRY300 - guarded on purpose, the happy path stays in the try
     except Exception as e:
@@ -868,7 +689,7 @@ def download_and_save_image(data, session, images_folder):
 
 
 def create_workbook(headers):
-    """Vytvoření Excelového workbooku s danými hlavičkami."""
+    """A workbook with the header row already written."""
     wb = Workbook()
     ws = wb.active
     ws.append(headers)
@@ -876,19 +697,19 @@ def create_workbook(headers):
 
 
 def autofit_column_widths(worksheet):
-    """Automatické přizpůsobení šířky sloupců na základě obsahu."""
+    """Widen every column to its longest value."""
     for col in worksheet.columns:
         max_length = 0
-        column = col[0].column_letter  # Získání názvu sloupce
+        column = col[0].column_letter
         for cell in col:
             if cell.value is not None:
                 max_length = max(max_length, len(str(cell.value)))
-        adjusted_width = (max_length + 2)  # Přidání malého prostoru navíc
+        adjusted_width = (max_length + 2)  # Two characters of padding.
         worksheet.column_dimensions[column].width = adjusted_width
 
 
 def save_workbook(wb, save_path, base_filename, part):
-    """Uložení workbooku na disk."""
+    """Write one part of the workbook to disk."""
     autofit_column_widths(wb.active)
     xlsx_filename = f"{base_filename}_part_{part}.xlsx"
     full_path = str(Path(save_path) / xlsx_filename)
@@ -897,12 +718,7 @@ def save_workbook(wb, save_path, base_filename, part):
 
 
 def parse_arguments():
-    """
-    Parsování command line argumentů.
-
-    Returns:
-        Parsed arguments
-    """
+    """Read the command line."""
     parser = argparse.ArgumentParser(
         description='Univerzální Shoptet scraper pro stahování XML feedů a produktů',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -948,18 +764,10 @@ Příklady použití:
 
 
 def main():
-    """
-    Hlavní funkce pro spuštění univerzálního Shoptet scraperu.
-
-    Podporuje automatické objevování dostupných obchodů a typů feedů.
-    """
-    # Parsování argumentů
+    """Entry point: discover shops, pick a feed, and scrape it."""
     args = parse_arguments()
-
-    # Nastavení loggingu
     logger = setup_logging()
 
-    # Vytvoření output manageru
     output_path = args.output if args.output else None
     output_manager = OutputManager(output_path)
     session_info = output_manager.get_session_info()
@@ -967,18 +775,16 @@ def main():
 
     if args.command == 'eshop':
         if args.store:
-            # Přímé spuštění pro konkrétní URL obchodu
             discovery = ShoptetStoreDiscovery(logger)
             store_config = discovery.discover_store_from_url(args.store)
 
             if not store_config:
-                logger.error(f" Nepodařilo se objevit Shoptet obchod na URL: {args.store}")
+                logger.error(f" No Shoptet shop at URL: {args.store}")
                 return
 
-            logger.info(f" Spouštění scraperu pro obchod: {store_config['name']} (Universal feed)")
+            logger.info(f" Scraping shop: {store_config['name']} (Universal feed)")
             run_scraper_for_store(store_config, 'universal', output_manager, logger, args.all_images)
         else:
-            # Interaktivní režim - zadání URL obchodů
             print("\n=== Univerzální Shoptet Scraper ===")
             print("Zadejte URL Shoptet obchodů (jeden na řádek, prázdný řádek pro ukončení):")
 
@@ -990,25 +796,22 @@ def main():
                 url_list.append(url)
 
             if not url_list:
-                logger.info(" Žádné URL nezadány")
+                logger.info(" No URLs given")
                 return
 
-            # Objevení obchodů
             discovery = ShoptetStoreDiscovery(logger)
             discovered_stores = discovery.discover_stores_from_list(url_list)
 
             if not discovered_stores:
-                logger.error(" Žádné Shoptet obchody nenalezeny")
+                logger.error(" No Shoptet shops found")
                 return
 
-            # Kontrola dostupnosti feedů
             available_stores = check_xml_feeds_for_stores(discovered_stores, logger)
 
             if not available_stores:
-                logger.error(" Žádné dostupné feedy nenalezeny")
+                logger.error(" No available feeds found")
                 return
 
-            # Výběr obchodu a feedu
             selection = show_available_stores(available_stores)
 
             if selection:
@@ -1018,62 +821,44 @@ def main():
                 run_scraper_for_store(store_config, feed_type, output_manager, logger, args.all_images)
 
 
-# Staré funkce odstraněny - nahrazeny novou architekturou
-
 
 def run_scraper_for_store(store_config: dict[str, str], feed_type: str,
                           output_manager: OutputManager, logger: logging.Logger,
                           scrape_all_images: bool = False):
-    """
-    Spuštění scraperu pro konkrétní obchod a typ feedu.
-
-    Args:
-        store_config: Konfigurace obchodu
-        feed_type: Typ XML feedu z XML_FEED_TYPES
-        output_manager: Manager pro výstupní složky
-        logger: Logger instance
-        scrape_all_images: Zda stahovat všechny obrázky z galerie produktů
-    """
+    """Run the whole pipeline for one shop: download, parse, images, workbook."""
     if feed_type not in XML_FEED_TYPES:
-        logger.error(f" Neznámý typ feedu: {feed_type}")
+        logger.error(f" Unknown feed type: {feed_type}")
         return
 
     feed_config = XML_FEED_TYPES[feed_type]
     mode_text = "všechny obrázky z galerií" if scrape_all_images else "pouze hlavní obrázky"
-    logger.info(f" Spouštění scraperu pro obchod: {store_config['name']}, feed: {feed_config['name']}, režim: {mode_text}")
+    logger.info(f" Scraping shop: {store_config['name']}, feed: {feed_config['name']}, mode: {mode_text}")
 
-    # Vytvoření scraperu
     scraper = ShoptetScraper(store_config, feed_type, logger, scrape_all_images)
 
-    # Vytvoření složek pro výstup
     store_path = output_manager.get_store_path(store_config['name'])
     images_folder = output_manager.get_images_path(store_path)
 
-    # Stažení XML
     xml_path = scraper.download_xml(store_path)
     if not xml_path:
-        logger.error(" Nepodařilo se stáhnout XML feed")
+        logger.error(" Could not download the feed")
         return
 
-    # Parsování XML
     root = scraper.parse_xml(xml_path)
     if root is None:
-        logger.error(" Nepodařilo se parsovat XML")
+        logger.error(" Could not parse the feed")
         return
 
-    # Extrakce dat obrázků
     image_data = scraper.extract_image_data(root)
     if not image_data:
-        logger.warning(" Žádné obrázky k stažení")
+        logger.warning(" No images to download")
         return
 
-    # Zpracování produktů
     scraper.process_products(root, image_data, images_folder, store_path)
 
-    # Smazání XML souboru
     scraper.cleanup_xml(xml_path)
 
-    logger.info(" Scraping dokončen úspěšně!")
+    logger.info(" Scraping finished")
 
 
 if __name__ == "__main__":

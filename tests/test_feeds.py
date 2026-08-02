@@ -1,3 +1,17 @@
+#
+# Project: shoptet-scraper
+# File:    test_feeds.py
+#
+# Description:
+# Tests for reading the three Shoptet product feed shapes.
+#
+# Author:
+# Jan Alexandr Kopřiva
+# jan.alexandr.kopriva@gmail.com
+#
+# License: MIT
+#
+
 """Tests for reading the Shoptet product feeds.
 
 The three feed shapes below are what the real endpoints serve. Google Shopping

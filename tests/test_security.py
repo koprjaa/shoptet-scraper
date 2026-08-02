@@ -1,3 +1,17 @@
+#
+# Project: shoptet-scraper
+# File:    test_security.py
+#
+# Description:
+# Tests for the checks that guard the scraper against the shops it reads.
+#
+# Author:
+# Jan Alexandr Kopřiva
+# jan.alexandr.kopriva@gmail.com
+#
+# License: MIT
+#
+
 """Tests for the checks that guard the scraper against the shops it reads."""
 
 import pytest

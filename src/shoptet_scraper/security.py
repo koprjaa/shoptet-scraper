@@ -1,3 +1,17 @@
+#
+# Project: shoptet-scraper
+# File:    security.py
+#
+# Description:
+# Checks that guard the scraper against the shop data it reads: server side request forgery, entity expansion, spreadsheet formulas, and unsafe file names.
+#
+# Author:
+# Jan Alexandr Kopřiva
+# jan.alexandr.kopriva@gmail.com
+#
+# License: MIT
+#
+
 """Checks that protect the scraper from the data it reads.
 
 The scraper follows URLs and opens images that a third-party shop controls, so

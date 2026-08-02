@@ -1,3 +1,17 @@
+#
+# Project: shoptet-scraper
+# File:    feeds.py
+#
+# Description:
+# Reads the XML product feeds a Shoptet shop serves, in all three of the shapes they come in.
+#
+# Author:
+# Jan Alexandr Kopřiva
+# jan.alexandr.kopriva@gmail.com
+#
+# License: MIT
+#
+
 """The XML product feeds a Shoptet shop serves.
 
 Every shop exposes the same product data at a handful of fixed paths. The feeds
