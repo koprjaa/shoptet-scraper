@@ -189,3 +189,76 @@ def test_a_nonsense_content_length_header_does_not_crash(monkeypatch):
     monkeypatch.setattr(security, "is_safe_url", lambda url: True)
     session = FakeSession(FakeResponse([b"abc"], {"content-length": "not a number"}))
     assert security.download_image_bytes(session, "https://shop.cz/a.jpg") == b"abc"
+
+
+# --- DNS rebinding ----------------------------------------------------------
+
+
+class FakeSocket:
+    def __init__(self, peer):
+        self._peer = peer
+
+    def getpeername(self):
+        return (self._peer, 443)
+
+
+class FakeRaw:
+    def __init__(self, peer):
+        self._connection = type("Conn", (), {"sock": FakeSocket(peer)})()
+
+
+class ConnectedResponse(FakeResponse):
+    """A response whose socket reports where it actually connected."""
+
+    def __init__(self, peer, chunks=(b"data",), headers=None):
+        super().__init__(list(chunks), headers)
+        self.raw = FakeRaw(peer)
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+def test_the_peer_address_is_read_off_the_socket():
+    from shoptet_scraper.security import peer_address
+
+    assert peer_address(ConnectedResponse("93.184.216.34")) == "93.184.216.34"
+
+
+def test_a_response_without_a_socket_reports_no_peer():
+    from shoptet_scraper.security import peer_address
+
+    response = FakeResponse([b"x"])
+    response.raw = type("Raw", (), {"_connection": None})()
+    assert peer_address(response) is None
+
+
+def test_a_connection_that_landed_on_a_private_address_is_dropped(monkeypatch):
+    """The name passed the first check and resolved elsewhere on the second.
+
+    That is DNS rebinding. The body must not be read.
+    """
+    import shoptet_scraper.security as security
+
+    monkeypatch.setattr(security, "is_safe_url", lambda url: True)
+    response = ConnectedResponse("127.0.0.1")
+    session = FakeSession(response)
+    assert security.download_image_bytes(session, "https://shop.cz/a.jpg") is None
+    assert response.closed is True
+
+
+@pytest.mark.parametrize("peer", ["10.0.0.1", "169.254.169.254", "::1", "100.64.0.1"])
+def test_every_private_peer_is_refused_after_connecting(peer, monkeypatch):
+    import shoptet_scraper.security as security
+
+    monkeypatch.setattr(security, "is_safe_url", lambda url: True)
+    session = FakeSession(ConnectedResponse(peer))
+    assert security.download_image_bytes(session, "https://shop.cz/a.jpg") is None
+
+
+def test_a_public_peer_is_read_normally(monkeypatch):
+    import shoptet_scraper.security as security
+
+    monkeypatch.setattr(security, "is_safe_url", lambda url: True)
+    session = FakeSession(ConnectedResponse("93.184.216.34", [b"abc", b"def"]))
+    assert security.download_image_bytes(session, "https://shop.cz/a.jpg") == b"abcdef"

@@ -69,14 +69,18 @@ One parser reads every feed. Google Shopping names its fields `id`, `title` and 
 
 The tool streams each feed and splits the rows into chunks, because Excel holds one million rows per sheet.
 
-Two checks guard the trust boundary. Every outgoing URL is resolved and refused when it points at a private, loopback or link-local address, so a shop cannot aim the scraper at the machine it runs on. Product names are quoted before they reach the spreadsheet, so a name beginning with `=` is not run as a formula.
+Three checks guard the trust boundary.
+
+The URL is resolved before the request and refused when it points at a private, loopback, link-local or carrier-grade NAT address, so a shop cannot aim the scraper at the machine it runs on. That check alone is not enough: the HTTP library resolves the name a second time, and a host under someone else's control can answer differently that time. So the socket is asked where it actually landed, and the body is not read until that address has passed the same test.
+
+Product names are quoted before they reach the spreadsheet, so a name beginning with `=` is not run as a formula.
 
 ## Limits
 
 - No resume. A crash leaves a half filled session folder. Delete it and run again.
 - The image download has no bandwidth limit. A shop with tens of thousands of products can trigger rate limiting at the origin.
 - Discovery assumes the current Shoptet URL convention. A custom template that moves the feed paths fails.
-- The hostname is resolved once for the safety check and again by the HTTP library. A name whose answer changes between the two can still slip through. Closing that needs the connection pinned to the address that was checked.
+- The image is fetched over one connection whose peer is checked, but a redirect to a different host is followed by the HTTP library without a second check. Disable redirects if the shop is not trusted at all.
 
 ## Development
 
