@@ -41,31 +41,31 @@ HEADERS = [
 XML_FEED_TYPES = {
     "universal": {
         "name": "Universal XML Feed",
-        "description": "Univerzální XML feed pro všechny produkty",
+        "description": "Every product the shop sells",
         "path": "/universal.xml",
         "headers": HEADERS,
     },
     "google": {
         "name": "Google Shopping XML Feed",
-        "description": "XML feed pro Google Shopping",
+        "description": "Feed for Google Shopping",
         "path": "/google.xml",
         "headers": HEADERS,
     },
     "heureka": {
         "name": "Heureka XML Feed",
-        "description": "XML feed pro srovnávač cen Heureka",
+        "description": "Feed for the Heureka price comparison site",
         "path": "/heureka.xml",
         "headers": HEADERS,
     },
     "zbozi": {
         "name": "Zboží.cz XML Feed",
-        "description": "XML feed pro srovnávač cen Zboží.cz",
+        "description": "Feed for the Zbozi.cz price comparison site",
         "path": "/zbozi.xml",
         "headers": HEADERS,
     },
     "shoptet_supplier": {
-        "name": "Shoptet Dodavatelský XML Feed",
-        "description": "XML feed pro dodavatele Shoptet",
+        "name": "Shoptet Supplier XML Feed",
+        "description": "Feed for Shoptet suppliers",
         "path": "/supplier.xml",
         "headers": HEADERS,
     },
@@ -119,10 +119,10 @@ class FeedParser:
         try:
             root = safe_xml_parse(xml_path).getroot()
         except Exception:
-            self.logger.exception(" Chyba při parsování %s", self.feed_config["name"])
+            self.logger.exception(" Could not parse %s", self.feed_config["name"])
             return None
         else:
-            self.logger.info(" %s úspěšně parsováno: %s", self.feed_config["name"], xml_path)
+            self.logger.info(" %s parsed: %s", self.feed_config["name"], xml_path)
             return root
 
     def get_headers(self) -> list[str]:
@@ -154,7 +154,7 @@ class FeedParser:
                 first_text(item, NAME_TAGS, f"product_{index}"),
             ))
         self.logger.info(
-            " Nalezeno %d obrázků v %s", len(image_data), self.feed_config["name"]
+            " Found %d images in %s", len(image_data), self.feed_config["name"]
         )
         return image_data
 
