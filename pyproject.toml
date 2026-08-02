@@ -22,12 +22,12 @@ classifiers = [
     "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
 ]
 dependencies = [
-    "requests>=2.32",
+    "requests>=2.33.0",
     "openpyxl>=3.1",
-    "Pillow>=11.0",
+    "Pillow>=12.3.0",
     "beautifulsoup4>=4.12",
-    "tqdm>=4.66",
-    "urllib3>=2.0",
+    "tqdm>=4.66.3",
+    "urllib3>=2.7.0",
     "defusedxml>=0.7.1",
 ]
 
