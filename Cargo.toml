@@ -4,7 +4,7 @@ version = "1.0.0"
 edition = "2021"
 authors = ["Jan Alexandr Kopřiva"]
 license = "MIT"
-description = "Discover Shoptet feeds, export Excel workbooks and download product images"
+description = "Finds a Shoptet shop's product feeds and exports them to Excel with images."
 repository = "https://github.com/koprjaa/shoptet-scraper"
 
 [dependencies]
