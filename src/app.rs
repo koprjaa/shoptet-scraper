@@ -2,7 +2,6 @@
 // File: app.rs
 // Description: Shop discovery, interactive selection and scraping pipeline.
 // Author: Jan Alexandr Kopřiva
-// Based on shoptet-scraper by Jan Alexandr Kopřiva
 // License: MIT
 use crate::{
     extract_image_data, find_items, first_text, gallery,

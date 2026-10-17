@@ -2,7 +2,6 @@
 // File: tests/common/mod.rs
 // Description: Isolated test output directories inside the workspace.
 // Author: Jan Alexandr Kopřiva
-// Based on shoptet-scraper by Jan Alexandr Kopřiva
 // License: MIT
 use std::{
     path::PathBuf,

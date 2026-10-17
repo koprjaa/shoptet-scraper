@@ -2,7 +2,6 @@
 // File: feeds.rs
 // Description: Offline equivalents of the original feed tests.
 // Author: Jan Alexandr Kopřiva
-// Based on shoptet-scraper by Jan Alexandr Kopřiva
 // License: MIT
 use shoptet_scraper::*;
 const UNIVERSAL: &str = include_str!("fixtures/universal.xml");

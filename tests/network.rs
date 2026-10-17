@@ -2,7 +2,6 @@
 // File: network.rs
 // Description: Local HTTP mocks for retries, peers, discovery and redirects.
 // Author: Jan Alexandr Kopřiva
-// Based on shoptet-scraper by Jan Alexandr Kopřiva
 // License: MIT
 mod common;
 use common::Temp;

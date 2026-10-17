@@ -2,7 +2,6 @@
 // File: output.rs
 // Description: Session directories, JPEG conversion and Excel parts.
 // Author: Jan Alexandr Kopřiva
-// Based on shoptet-scraper by Jan Alexandr Kopřiva
 // License: MIT
 use crate::{security::sanitize_filename, ImageData, Result, HEADERS};
 use image::{codecs::jpeg::JpegEncoder, GenericImageView, ImageReader};

@@ -2,7 +2,6 @@
 // File: security.rs
 // Description: Offline equivalents of every original security test.
 // Author: Jan Alexandr Kopřiva
-// Based on shoptet-scraper by Jan Alexandr Kopřiva
 // License: MIT
 use shoptet_scraper::{network::Http, parse_xml, security::*};
 use std::{io::Cursor, net::IpAddr};

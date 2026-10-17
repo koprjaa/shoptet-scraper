@@ -2,7 +2,6 @@
 // File: main.rs
 // Description: Command line entry point.
 // Author: Jan Alexandr Kopřiva
-// Based on shoptet-scraper by Jan Alexandr Kopřiva
 // License: MIT
 use clap::Parser;
 use shoptet_scraper::{

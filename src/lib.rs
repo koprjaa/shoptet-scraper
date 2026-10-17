@@ -2,7 +2,6 @@
 // File: lib.rs
 // Description: Feed parsing and safe output values.
 // Author: Jan Alexandr Kopřiva
-// Based on shoptet-scraper by Jan Alexandr Kopřiva
 // License: MIT
 pub mod app;
 pub mod network;

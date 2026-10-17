@@ -2,7 +2,6 @@
 // File: network.rs
 // Description: Retrying HTTP sessions with redirect and peer checks.
 // Author: Jan Alexandr Kopřiva
-// Based on shoptet-scraper by Jan Alexandr Kopřiva
 // License: MIT
 use crate::{
     security::{is_blocked_ip, is_safe_url, read_limited, MAX_IMAGE_DOWNLOAD_BYTES},

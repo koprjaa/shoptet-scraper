@@ -2,7 +2,6 @@
 // File: pipeline.rs
 // Description: End-to-end local feed, gallery, image and workbook regressions.
 // Author: Jan Alexandr Kopřiva
-// Based on shoptet-scraper by Jan Alexandr Kopřiva
 // License: MIT
 mod common;
 use common::Temp;

@@ -2,7 +2,6 @@
 // File: security.rs
 // Description: URL, address, XML and spreadsheet trust boundaries.
 // Author: Jan Alexandr Kopřiva
-// Based on shoptet-scraper by Jan Alexandr Kopřiva
 // License: MIT
 use crate::Result;
 use std::{
