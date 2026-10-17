@@ -147,20 +147,18 @@ class FeedParser:
             img_url = first_text(item, IMAGE_TAGS)
             if not img_url:
                 continue
-            image_data.append((
-                index,
-                img_url,
-                first_text(item, NUMBER_TAGS, f"product_{index}"),
-                first_text(item, NAME_TAGS, f"product_{index}"),
-            ))
-        self.logger.info(
-            " Found %d images in %s", len(image_data), self.feed_config["name"]
-        )
+            image_data.append(
+                (
+                    index,
+                    img_url,
+                    first_text(item, NUMBER_TAGS, f"product_{index}"),
+                    first_text(item, NAME_TAGS, f"product_{index}"),
+                )
+            )
+        self.logger.info(" Found %d images in %s", len(image_data), self.feed_config["name"])
         return image_data
 
-    def extract_product_data(
-        self, shopitem: ET.Element, product_no: str, image_filename: str
-    ) -> list[str]:
+    def extract_product_data(self, shopitem: ET.Element, product_no: str, image_filename: str) -> list[str]:
         """One spreadsheet row for a product, in header order."""
         row = [shopitem.findtext(tag, default="") for tag in PRODUCT_TAGS]
         row.append(product_no)

@@ -172,8 +172,17 @@ def test_a_product_row_follows_the_header_order(logger):
     row = parser("universal", logger).extract_product_data(item, "A-1", "a1.jpg")
     assert len(row) == len(HEADERS)
     assert row == [
-        "Boty Alfa", "https://shop.cz/boty-alfa", "500", "605", "21",
-        "Alfa", "Obuv", "8590000000001", "A-1", "0", "a1.jpg",
+        "Boty Alfa",
+        "https://shop.cz/boty-alfa",
+        "500",
+        "605",
+        "21",
+        "Alfa",
+        "Obuv",
+        "8590000000001",
+        "A-1",
+        "0",
+        "a1.jpg",
     ]
 
 

@@ -57,12 +57,14 @@ class ProductImageScraper:
             status_forcelist=(500, 502, 504, 408, 429),
         )
         adapter = HTTPAdapter(max_retries=retry)
-        session.mount('http://', adapter)
-        session.mount('https://', adapter)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
 
-        session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        })
+        session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            }
+        )
 
         return session
 
@@ -80,33 +82,33 @@ class ProductImageScraper:
             response = self.session.get(product_url, timeout=15)
             response.raise_for_status()
 
-            soup = BeautifulSoup(response.content, 'html.parser')
+            soup = BeautifulSoup(response.content, "html.parser")
             images = []
 
-            main_image = soup.find('a', class_='p-main-image')
+            main_image = soup.find("a", class_="p-main-image")
             if main_image:
-                img_url = main_image.get('href')
+                img_url = main_image.get("href")
                 if img_url:
-                    orig_url = img_url.replace('/big/', '/orig/')
-                    alt_text = main_image.find('img').get('alt', '') if main_image.find('img') else ''
+                    orig_url = img_url.replace("/big/", "/orig/")
+                    alt_text = main_image.find("img").get("alt", "") if main_image.find("img") else ""
                     images.append((orig_url, alt_text))
 
-            thumbnails = soup.find_all('a', class_='p-thumbnail')
+            thumbnails = soup.find_all("a", class_="p-thumbnail")
             for thumbnail in thumbnails:
-                img_url = thumbnail.get('href')
+                img_url = thumbnail.get("href")
                 if img_url and img_url not in [img[0] for img in images]:
-                    orig_url = img_url.replace('/big/', '/orig/')
-                    alt_text = thumbnail.find('img').get('alt', '') if thumbnail.find('img') else ''
+                    orig_url = img_url.replace("/big/", "/orig/")
+                    alt_text = thumbnail.find("img").get("alt", "") if thumbnail.find("img") else ""
                     images.append((orig_url, alt_text))
 
             # Lazy loaded images carry the URL in data-src only, so neither lookup
             # above finds them.
-            data_src_images = soup.find_all('img', {'data-src': True})
+            data_src_images = soup.find_all("img", {"data-src": True})
             for img in data_src_images:
-                data_src = img.get('data-src')
-                if data_src and '/related/' in data_src:
-                    orig_url = data_src.replace('/related/', '/orig/')
-                    alt_text = img.get('alt', '')
+                data_src = img.get("data-src")
+                if data_src and "/related/" in data_src:
+                    orig_url = data_src.replace("/related/", "/orig/")
+                    alt_text = img.get("alt", "")
                     if orig_url not in [img[0] for img in images]:
                         images.append((orig_url, alt_text))
 
@@ -140,12 +142,14 @@ class ShoptetStoreDiscovery:
             status_forcelist=(500, 502, 504, 408, 429),
         )
         adapter = HTTPAdapter(max_retries=retry)
-        session.mount('http://', adapter)
-        session.mount('https://', adapter)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
 
-        session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        })
+        session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            }
+        )
 
         return session
 
@@ -161,14 +165,14 @@ class ShoptetStoreDiscovery:
             if not self._is_shoptet_store(clean_url):
                 return None
 
-            store_name = parsed.netloc.replace('.shoptet.cz', '').replace('.cz', '').replace('www.', '')
-            store_key = store_name.replace('-', '_').replace('.', '_')
+            store_name = parsed.netloc.replace(".shoptet.cz", "").replace(".cz", "").replace("www.", "")
+            store_key = store_name.replace("-", "_").replace(".", "_")
 
             return {
-                'name': store_name.title(),
-                'base_url': clean_url,
-                'feed_filename': f'feed_{store_key}',
-                'store_key': store_key
+                "name": store_name.title(),
+                "base_url": clean_url,
+                "feed_filename": f"feed_{store_key}",
+                "store_key": store_key,
             }
 
         except Exception:
@@ -187,11 +191,7 @@ class ShoptetStoreDiscovery:
                 self.logger.warning(f" Refused unsafe shop URL: {url}")
                 return False
 
-            test_urls = [
-                f"{url}/universal.xml",
-                f"{url}/google.xml",
-                f"{url}/heureka.xml"
-            ]
+            test_urls = [f"{url}/universal.xml", f"{url}/google.xml", f"{url}/heureka.xml"]
 
             for test_url in test_urls:
                 try:
@@ -199,15 +199,19 @@ class ShoptetStoreDiscovery:
                     # body is needed anyway when the content type is not set.
                     response = self.session.get(test_url, timeout=15, stream=True)
                     if response.status_code == 200:
-                        content_type = response.headers.get('content-type', '').lower()
-                        if 'xml' in content_type or 'text/xml' in content_type:
+                        content_type = response.headers.get("content-type", "").lower()
+                        if "xml" in content_type or "text/xml" in content_type:
                             self.logger.info(f" Shoptet shop found: {url} (feed: {test_url})")
                             return True
 
                         # Content type was no help, so look at the start of the body.
                         try:
-                            content_preview = response.content[:500].decode('utf-8', errors='ignore')
-                            if '<?xml' in content_preview or '<SHOP' in content_preview or '<rss' in content_preview:
+                            content_preview = response.content[:500].decode("utf-8", errors="ignore")
+                            if (
+                                "<?xml" in content_preview
+                                or "<SHOP" in content_preview
+                                or "<rss" in content_preview
+                            ):
                                 self.logger.info(f" Shoptet shop found: {url} (XML body detected)")
                                 return True
                         except UnicodeDecodeError:
@@ -223,7 +227,7 @@ class ShoptetStoreDiscovery:
                 response = self.session.get(url, timeout=10)
                 if response.status_code == 200:
                     content = response.text.lower()
-                    if 'shoptet' in content or 'shoptet.cz' in content:
+                    if "shoptet" in content or "shoptet.cz" in content:
                         self.logger.info(f" Shoptet shop found: {url} (named on the home page)")
                         return True
             except Exception as e:
@@ -244,7 +248,7 @@ class ShoptetStoreDiscovery:
         for url in url_list:
             store_config = self.discover_store_from_url(url)
             if store_config:
-                store_key = store_config['store_key']
+                store_key = store_config["store_key"]
                 discovered_stores[store_key] = store_config
 
         self.logger.info(f" Found {len(discovered_stores)} Shoptet shops")
@@ -256,7 +260,7 @@ class OutputManager:
 
     def __init__(self, base_path: str | None = None):
         if base_path is None:
-            base_path = str(Path(__file__).resolve().parent / 'output')
+            base_path = str(Path(__file__).resolve().parent / "output")
 
         self.base_path = base_path
         self.today = datetime.now().strftime("%Y-%m-%d")
@@ -286,29 +290,21 @@ class OutputManager:
 
     def get_images_path(self, store_path: str) -> str:
         """Image folder inside one shop's folder."""
-        images_path = str(Path(store_path) / 'images')
+        images_path = str(Path(store_path) / "images")
         Path(images_path).mkdir(parents=True, exist_ok=True)
         return images_path
 
     def get_session_info(self) -> dict[str, str]:
         """Where this run writes, and for which date."""
-        return {
-            'session_path': self.session_path,
-            'date': self.today,
-            'base_path': self.base_path
-        }
-
+        return {"session_path": self.session_path, "date": self.today, "base_path": self.base_path}
 
 
 def setup_logging():
     """Log to the console and to shoptet_scraper.log."""
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler('shoptet_scraper.log'),
-            logging.StreamHandler()
-        ]
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[logging.FileHandler("shoptet_scraper.log"), logging.StreamHandler()],
     )
     return logging.getLogger(__name__)
 
@@ -316,8 +312,13 @@ def setup_logging():
 class ShoptetScraper:
     """One shop, one feed type: download it, read it, and write the workbook."""
 
-    def __init__(self, store_config: dict[str, str], feed_type: str, logger: logging.Logger,
-                 scrape_all_images: bool = False):
+    def __init__(
+        self,
+        store_config: dict[str, str],
+        feed_type: str,
+        logger: logging.Logger,
+        scrape_all_images: bool = False,
+    ):
         self.store_config = store_config
         self.feed_type = feed_type
         self.feed_config = XML_FEED_TYPES[feed_type]
@@ -338,13 +339,9 @@ class ShoptetScraper:
             backoff_factor=0.5,
             status_forcelist=(500, 502, 504),
         )
-        adapter = HTTPAdapter(
-            max_retries=retry,
-            pool_connections=100,
-            pool_maxsize=100
-        )
-        session.mount('http://', adapter)
-        session.mount('https://', adapter)
+        adapter = HTTPAdapter(max_retries=retry, pool_connections=100, pool_maxsize=100)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
         return session
 
     def validate_url(self, url: str) -> bool:
@@ -354,10 +351,10 @@ class ShoptetScraper:
             # is_safe_url is what actually blocks a hostile target. The name check
             # below it only keeps the tool pointed at Shoptet feeds.
             return bool(
-                parsed.scheme in ['http', 'https'] and
-                parsed.netloc and
-                ('shoptet' in parsed.netloc or 'universal.xml' in url) and
-                is_safe_url(url)
+                parsed.scheme in ["http", "https"]
+                and parsed.netloc
+                and ("shoptet" in parsed.netloc or "universal.xml" in url)
+                and is_safe_url(url)
             )
         except Exception:
             return False
@@ -376,19 +373,22 @@ class ShoptetScraper:
             response = self.session.get(xml_url, stream=True, timeout=30)
             response.raise_for_status()
 
-            today = datetime.now().strftime('%d-%m-%Y')
+            today = datetime.now().strftime("%d-%m-%Y")
             xml_filename = f"{self.store_config['feed_filename']}_{self.feed_type}_{today}.xml"
             full_xml_path = str(Path(save_path) / xml_filename)
 
-            total_size_in_bytes = int(response.headers.get('content-length', 0))
+            total_size_in_bytes = int(response.headers.get("content-length", 0))
             block_size = 1024
 
-            with Path(full_xml_path).open('wb') as file, tqdm(
-                total=total_size_in_bytes,
-                unit='iB',
-                unit_scale=True,
-                desc=f"Stahování {self.feed_config['name']}"
-            ) as t:
+            with (
+                Path(full_xml_path).open("wb") as file,
+                tqdm(
+                    total=total_size_in_bytes,
+                    unit="iB",
+                    unit_scale=True,
+                    desc=f"Stahování {self.feed_config['name']}",
+                ) as t,
+            ):
                 for chunk in response.iter_content(chunk_size=block_size):
                     if chunk:
                         file.write(chunk)
@@ -419,14 +419,14 @@ class ShoptetScraper:
     def _extract_all_product_images(self, root: ET.Element) -> list[tuple[int, str, str, str]]:
         """Gallery images for every product, one request per product page."""
         all_images = []
-        shopitems = root.findall('.//SHOPITEM')
+        shopitems = root.findall(".//SHOPITEM")
 
         self.logger.info(f" Reading galleries for {len(shopitems)} products...")
 
         for index, shopitem in enumerate(shopitems, start=1):
-            product_url = shopitem.findtext('URL', default='')
-            product_no = shopitem.findtext('PRODUCTNO', default=f"product_{index}")
-            product_name = shopitem.findtext('PRODUCT', default=f"product_{index}")
+            product_url = shopitem.findtext("URL", default="")
+            product_no = shopitem.findtext("PRODUCTNO", default=f"product_{index}")
+            product_name = shopitem.findtext("PRODUCT", default=f"product_{index}")
 
             if not product_url:
                 continue
@@ -458,17 +458,17 @@ class ShoptetScraper:
             # JPEG has no alpha, and a straight convert('RGB') renders transparent
             # pixels black. Compositing onto white keeps the product on the
             # background the shop intended.
-            if image.mode == 'P':
-                image = image.convert('RGBA')
-                background = PILImage.new('RGB', image.size, (255, 255, 255))
+            if image.mode == "P":
+                image = image.convert("RGBA")
+                background = PILImage.new("RGB", image.size, (255, 255, 255))
                 background.paste(image, mask=image.split()[-1])
                 image = background
-            elif image.mode == 'RGBA':
-                background = PILImage.new('RGB', image.size, (255, 255, 255))
+            elif image.mode == "RGBA":
+                background = PILImage.new("RGB", image.size, (255, 255, 255))
                 background.paste(image, mask=image.split()[-1])
                 image = background
-            elif image.mode not in ('RGB', 'L'):
-                image = image.convert('RGB')
+            elif image.mode not in ("RGB", "L"):
+                image = image.convert("RGB")
 
             # The name comes from the shop, so it goes through sanitize_filename.
             sanitized_name = sanitize_filename(product_name)
@@ -476,18 +476,23 @@ class ShoptetScraper:
             image_filename = f"{sanitized_name}_{sanitized_product_no}_{index}.jpg"
             image_path = str(Path(images_folder) / image_filename)
 
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
+            if image.mode != "RGB":
+                image = image.convert("RGB")
 
-            image.save(image_path, format='JPEG', quality=85, optimize=True)
+            image.save(image_path, format="JPEG", quality=85, optimize=True)
             return image_filename  # noqa: TRY300 - guarded on purpose, the happy path stays in the try
 
         except Exception:
             self.logger.exception(f" Could not download image {img_url}")
             return None
 
-    def process_products(self, root: ET.Element, image_data: list[tuple[int, str, str, str]],
-                        images_folder: str, save_path: str) -> None:
+    def process_products(
+        self,
+        root: ET.Element,
+        image_data: list[tuple[int, str, str, str]],
+        images_folder: str,
+        save_path: str,
+    ) -> None:
         """Download the images and write the products to workbooks.
 
         Split every 1000 rows. Excel copes with more, but the files are opened by
@@ -500,10 +505,10 @@ class ShoptetScraper:
         product_counter = 0
 
         # The Google feed wraps products in <item>, the others in <SHOPITEM>.
-        if self.feed_type == 'google':
-            shopitems = root.findall('.//item') or root.findall('.//SHOPITEM')
+        if self.feed_type == "google":
+            shopitems = root.findall(".//item") or root.findall(".//SHOPITEM")
         else:
-            shopitems = root.findall('.//SHOPITEM')
+            shopitems = root.findall(".//SHOPITEM")
 
         total_images = len(image_data)
 
@@ -516,7 +521,9 @@ class ShoptetScraper:
                 for item in image_data
             }
 
-            with tqdm(total=total_images, desc=f"Zpracování {self.feed_config['name']}", unit="obrázek") as pbar:
+            with tqdm(
+                total=total_images, desc=f"Zpracování {self.feed_config['name']}", unit="obrázek"
+            ) as pbar:
                 for future in as_completed(futures):
                     index, _img_url, product_no, _product_name = futures[future]
                     image_filename = future.result()
@@ -539,7 +546,9 @@ class ShoptetScraper:
 
         # Whatever is left below the 1000 row split.
         if product_counter % 1000 != 0:
-            base_filename = f"{self.store_config['feed_filename']}_{self.feed_type}_{datetime.now().strftime('%d-%m-%Y')}"
+            base_filename = (
+                f"{self.store_config['feed_filename']}_{self.feed_type}_{datetime.now().strftime('%d-%m-%Y')}"
+            )
             save_workbook(wb, save_path, base_filename, part_number)
 
         self.logger.info(f" {self.feed_config['name']} done ({product_counter} products)")
@@ -562,15 +571,18 @@ class ShoptetScraper:
             if is_available:
                 self.logger.info(f" {self.feed_config['name']} available: {xml_url}")
             else:
-                self.logger.warning(f" {self.feed_config['name']} unavailable (status {response.status_code}): {xml_url}")
+                self.logger.warning(
+                    f" {self.feed_config['name']} unavailable (status {response.status_code}): {xml_url}"
+                )
             return is_available  # noqa: TRY300 - guarded on purpose, the happy path stays in the try
         except Exception as e:
             self.logger.warning(f" {self.feed_config['name']} unavailable ({e}): {xml_url}")
             return False
 
 
-def check_xml_feeds_for_stores(discovered_stores: dict[str, dict[str, str]],
-                               logger: logging.Logger) -> dict[str, dict[str, str]]:
+def check_xml_feeds_for_stores(
+    discovered_stores: dict[str, dict[str, str]], logger: logging.Logger
+) -> dict[str, dict[str, str]]:
     """Which feed types each discovered shop actually serves."""
     logger.info(" Checking which feeds are available...")
     available_stores = {}
@@ -584,10 +596,7 @@ def check_xml_feeds_for_stores(discovered_stores: dict[str, dict[str, str]],
                 store_feeds[feed_type] = feed_config
 
         if store_feeds:
-            available_stores[store_key] = {
-                'store_config': store_config,
-                'available_feeds': store_feeds
-            }
+            available_stores[store_key] = {"store_config": store_config, "available_feeds": store_feeds}
 
     logger.info(f" {len(available_stores)} shops serve at least one feed")
     return available_stores
@@ -603,9 +612,9 @@ def show_available_stores(available_stores: dict[str, dict[str, str]]) -> tuple[
 
     store_list = list(available_stores.items())
     for i, (_store_key, store_data) in enumerate(store_list, 1):
-        store_config = store_data['store_config']
-        available_feeds = store_data['available_feeds']
-        feed_names = [feed_config['name'] for feed_config in available_feeds.values()]
+        store_config = store_data["store_config"]
+        available_feeds = store_data["available_feeds"]
+        feed_names = [feed_config["name"] for feed_config in available_feeds.values()]
         print(f"{i}. {store_config['name']} ({store_config['base_url']})")
         print(f"   Dostupné feedy: {', '.join(feed_names)}")
 
@@ -615,12 +624,12 @@ def show_available_stores(available_stores: dict[str, dict[str, str]]) -> tuple[
         try:
             choice = input(f"\nVyberte obchod (0-{len(store_list)}): ").strip()
 
-            if choice == '0':
+            if choice == "0":
                 return None
             choice_num = int(choice)
             if 1 <= choice_num <= len(store_list):
                 store_key, store_data = store_list[choice_num - 1]
-                available_feeds = store_data['available_feeds']
+                available_feeds = store_data["available_feeds"]
 
                 # One feed means no second question worth asking.
                 if len(available_feeds) == 1:
@@ -657,11 +666,9 @@ def requests_retry_session(retries=5, backoff_factor=0.5, status_forcelist=(500,
         status_forcelist=status_forcelist,
     )
     adapter = HTTPAdapter(max_retries=retry)
-    session.mount('http://', adapter)
-    session.mount('https://', adapter)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
     return session
-
-
 
 
 def download_and_save_image(data, session, images_folder):
@@ -674,14 +681,14 @@ def download_and_save_image(data, session, images_folder):
             return None
         # security.py caps MAX_IMAGE_PIXELS. The warning is left to surface.
         image = PILImage.open(BytesIO(image_bytes))
-        if image.mode in ('RGBA', 'P', 'CMYK'):
-            image = image.convert('RGB')
+        if image.mode in ("RGBA", "P", "CMYK"):
+            image = image.convert("RGB")
         # The name comes from the shop, so it goes through sanitize_filename.
         sanitized_name = sanitize_filename(product_name)
         sanitized_product_no = sanitize_filename(product_no)
         image_filename = f"{sanitized_name}_{sanitized_product_no}_{index}.jpg"
         image_path = str(Path(images_folder) / image_filename)
-        image.save(image_path, format='JPEG', quality=85)
+        image.save(image_path, format="JPEG", quality=85)
         return image_filename  # noqa: TRY300 - guarded on purpose, the happy path stays in the try
     except Exception as e:
         print(f"Error downloading image at {img_url}: {e}")
@@ -704,7 +711,7 @@ def autofit_column_widths(worksheet):
         for cell in col:
             if cell.value is not None:
                 max_length = max(max_length, len(str(cell.value)))
-        adjusted_width = (max_length + 2)  # Two characters of padding.
+        adjusted_width = max_length + 2  # Two characters of padding.
         worksheet.column_dimensions[column].width = adjusted_width
 
 
@@ -720,44 +727,31 @@ def save_workbook(wb, save_path, base_filename, part):
 def parse_arguments():
     """Read the command line."""
     parser = argparse.ArgumentParser(
-        description='Univerzální Shoptet scraper pro stahování XML feedů a produktů',
+        description="Univerzální Shoptet scraper pro stahování XML feedů a produktů",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Příklady použití:
   python main.py eshop                    # Interaktivní režim - zadání URL obchodů
   python main.py eshop --store https://example.shoptet.cz  # Přímé spuštění pro URL
   python main.py --help                   # Zobrazení nápovědy
-        """
+        """,
     )
 
     parser.add_argument(
-        'command',
-        choices=['eshop'],
-        help='Příkaz k provedení (eshop = objevování Shoptet obchodů)'
+        "command", choices=["eshop"], help="Příkaz k provedení (eshop = objevování Shoptet obchodů)"
     )
 
-    parser.add_argument(
-        '--store',
-        type=str,
-        help='Přímé zadání URL Shoptet obchodu'
-    )
+    parser.add_argument("--store", type=str, help="Přímé zadání URL Shoptet obchodu")
+
+    parser.add_argument("--output", type=str, help="Cesta pro výstupní složky (default: ./output)")
+
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose výstup")
 
     parser.add_argument(
-        '--output',
-        type=str,
-        help='Cesta pro výstupní složky (default: ./output)'
-    )
-
-    parser.add_argument(
-        '--verbose', '-v',
-        action='store_true',
-        help='Verbose výstup'
-    )
-
-    parser.add_argument(
-        '--all-images', '-a',
-        action='store_true',
-        help='Stahovat všechny obrázky z galerie produktů (pomalejší)'
+        "--all-images",
+        "-a",
+        action="store_true",
+        help="Stahovat všechny obrázky z galerie produktů (pomalejší)",
     )
 
     return parser.parse_args()
@@ -773,7 +767,7 @@ def main():
     session_info = output_manager.get_session_info()
     logger.info(f" Session: {session_info['session_path']}")
 
-    if args.command == 'eshop':
+    if args.command == "eshop":
         if args.store:
             discovery = ShoptetStoreDiscovery(logger)
             store_config = discovery.discover_store_from_url(args.store)
@@ -783,7 +777,7 @@ def main():
                 return
 
             logger.info(f" Scraping shop: {store_config['name']} (Universal feed)")
-            run_scraper_for_store(store_config, 'universal', output_manager, logger, args.all_images)
+            run_scraper_for_store(store_config, "universal", output_manager, logger, args.all_images)
         else:
             print("\n=== Univerzální Shoptet Scraper ===")
             print("Zadejte URL Shoptet obchodů (jeden na řádek, prázdný řádek pro ukončení):")
@@ -817,14 +811,17 @@ def main():
             if selection:
                 store_key, feed_type = selection
                 store_data = available_stores[store_key]
-                store_config = store_data['store_config']
+                store_config = store_data["store_config"]
                 run_scraper_for_store(store_config, feed_type, output_manager, logger, args.all_images)
 
 
-
-def run_scraper_for_store(store_config: dict[str, str], feed_type: str,
-                          output_manager: OutputManager, logger: logging.Logger,
-                          scrape_all_images: bool = False):
+def run_scraper_for_store(
+    store_config: dict[str, str],
+    feed_type: str,
+    output_manager: OutputManager,
+    logger: logging.Logger,
+    scrape_all_images: bool = False,
+):
     """Run the whole pipeline for one shop: download, parse, images, workbook."""
     if feed_type not in XML_FEED_TYPES:
         logger.error(f" Unknown feed type: {feed_type}")
@@ -836,7 +833,7 @@ def run_scraper_for_store(store_config: dict[str, str], feed_type: str,
 
     scraper = ShoptetScraper(store_config, feed_type, logger, scrape_all_images)
 
-    store_path = output_manager.get_store_path(store_config['name'])
+    store_path = output_manager.get_store_path(store_config["name"])
     images_folder = output_manager.get_images_path(store_path)
 
     xml_path = scraper.download_xml(store_path)

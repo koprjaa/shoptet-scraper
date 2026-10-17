@@ -171,9 +171,7 @@ def test_a_declared_size_over_the_limit_is_refused(monkeypatch):
     import shoptet_scraper.security as security
 
     monkeypatch.setattr(security, "is_safe_url", lambda url: True)
-    session = FakeSession(
-        FakeResponse([b"x"], {"content-length": str(MAX_IMAGE_DOWNLOAD_BYTES + 1)})
-    )
+    session = FakeSession(FakeResponse([b"x"], {"content-length": str(MAX_IMAGE_DOWNLOAD_BYTES + 1)}))
     with pytest.raises(ValueError, match="over the limit"):
         security.download_image_bytes(session, "https://shop.cz/a.jpg")
 
