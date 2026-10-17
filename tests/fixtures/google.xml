@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss><channel>
+  <item>
+    <id>A-1</id><title>Boty Alfa</title>
+    <image_link>https://shop.cz/img/a1.jpg</image_link>
+  </item>
+  <item>
+    <id>B-2</id><title>Boty Beta</title>
+    <image_link>https://shop.cz/img/b2.jpg</image_link>
+  </item>
+</channel></rss>

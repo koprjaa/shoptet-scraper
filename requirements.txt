@@ -1,9 +1,0 @@
-requests>=2.33.0
-openpyxl>=3.0.10
-Pillow>=12.3.0
-tqdm>=4.66.3
-urllib3>=2.7.0
-beautifulsoup4>=4.11.0
-# Optional: hardens XML parsing against entity expansion / XXE.
-# If absent, the parser rejects XML containing DOCTYPE/ENTITY instead.
-defusedxml>=0.7.1

@@ -1,95 +1,178 @@
 # shoptet-scraper
 
-Finds the product feeds of a Shoptet online shop, parses them into Excel files, and downloads the product images in parallel.
+Find Shoptet product feeds, export Excel workbooks, and download product images.
 
-![python](https://img.shields.io/badge/python-3.8+-3776AB?style=flat-square&logo=python&logoColor=white)
+![rust](https://img.shields.io/badge/rust-stable-DEA584?style=flat-square&logo=rust&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-A31F34?style=flat-square)
-![status](https://img.shields.io/badge/status-active-22863A?style=flat-square)
 [![ci](https://github.com/koprjaa/shoptet-scraper/actions/workflows/ci.yml/badge.svg)](https://github.com/koprjaa/shoptet-scraper/actions/workflows/ci.yml)
 
-## What it does
-
-Shoptet is a Czech and Slovak e-commerce platform that runs about 30,000 shops. Every shop serves its product data at fixed paths: `/universal.xml`, `/google.xml`, `/heureka.xml`, `/zbozi.xml`, and `/supplier.xml`. This tool probes those five paths, parses each feed it finds, writes the result to Excel, and downloads the images.
 
 ## Install
 
-```bash
-uv venv
-uv pip install -r requirements.txt
+Install the stable Rust toolchain, then run:
+
+```sh
+cargo install --path .
 ```
 
 ## Use
 
-Interactive mode. Paste one URL per line and submit with a blank line:
+Interactive mode accepts one URL per line, followed by a blank line. Choose a
+shop and an available feed from the menu.
 
-```bash
-python main.py eshop
+```sh
+shoptet-scraper eshop
+shoptet-scraper eshop --store https://example.shoptet.cz
+shoptet-scraper eshop --store https://example.shoptet.cz --all-images
 ```
 
-Direct mode:
+| Argument | Default | Effect |
+| --- | --- | --- |
+| `eshop` | required | Discover and scrape shops |
+| `--store URL` | none | Discover this shop and scrape its universal feed |
+| `--output PATH` | `./output` | Parent directory for numbered sessions |
+| `-v`, `--verbose` | off | Enable DEBUG logging |
+| `-a`, `--all-images` | off | Read product pages for all gallery images |
+| `-h`, `--help` | | Display help |
 
-```bash
-python main.py eshop --store https://www.gardners-eshop.cz
-```
+Sessions use local dates and the first unused `YYYY-MM-DD_NNN` directory.
+Each shop has a sanitized title-cased subdirectory with workbooks and `images/`:
 
-Download the full image gallery instead of the main image only. This is slower:
-
-```bash
-python main.py eshop --store https://example.shoptet.cz --all-images
-```
-
-Output goes to numbered session folders, in the form `YYYY-MM-DD_NNN`. Repeated runs against the same shop do not overwrite an earlier snapshot.
-
-```
-output/2026-04-17_001/
-  feed_gardners_universal_17-04-2026_part_1.xlsx
-  feed_gardners_universal_17-04-2026_part_2.xlsx
+```text
+output/2026-10-17_001/Example/
+  feed_example_universal_17-10-2026_part_1.xlsx
   images/
 ```
 
-## Options
+The five feed paths are `/universal.xml`, `/google.xml`, `/heureka.xml`,
+`/zbozi.xml`, and `/supplier.xml`. Each workbook contains at most 1,000 data
+rows on the `Sheet` worksheet, with the following string columns in order:
 
-| Flag | Default | Effect |
-|---|---|---|
-| `eshop` | required | Mode. Discovers the feeds and scrapes them. |
-| `--store <url>` | none | Skip the interactive URL prompt. |
-| `--output <path>` | `./output` | Parent folder for the session folders. |
-| `-v, --verbose` | off | Enable DEBUG logging. |
-| `-a, --all-images` | off | Download every gallery image, not the main one only. |
-
-## How it works
-
-```
-src/shoptet_scraper/security.py   URL checks, size limits, XML and file name sanitizing
-src/shoptet_scraper/feeds.py      Feed definitions and the parser
-main.py                           Discovery, Excel output, image download, CLI
+```text
+PRODUCT URL PRICE PRICE_VAT VAT MANUFACTURER CATEGORYTEXT EAN PRODUCTNO DELIVERY_DATE IMAGE_FILENAME
 ```
 
-One parser reads every feed. Google Shopping names its fields `id`, `title` and `image_link`, the Czech comparison sites use `PRODUCTNO`, `PRODUCT` and `IMGURL`, and the parser tries each spelling in turn. A sixth format costs one entry in `XML_FEED_TYPES` plus the tag names it uses.
+Products without an image are omitted. Failed downloads still produce a row
+with an empty image filename. Rows follow image download completion order.
+Gallery mode produces one row per image. Images are JPEG quality 85 on white.
+The XML is retained after parsing failure or when no images are found; after
+successful workbook processing it is deleted. No CSV or JSON outputs exist.
 
-The tool streams each feed and splits the rows into chunks, because Excel holds one million rows per sheet.
+Logs append to `shoptet_scraper.log` and stderr using the original timestamp and
+level format. Argument errors exit 2; unexpected runtime failures exit 1;
+ordinary unavailable shops/feeds, no input, quitting, and Ctrl-C exit 0.
 
-Three checks guard the trust boundary.
+## Network and safety
 
-The URL is resolved before the request and refused when it points at a private, loopback, link-local or carrier-grade NAT address, so a shop cannot aim the scraper at the machine it runs on. That check alone is not enough: the HTTP library resolves the name a second time, and a host under someone else's control can answer differently that time. So the socket is asked where it actually landed, and the body is not read until that address has passed the same test.
+Discovery and galleries use the original Chrome 91 macOS User-Agent and three
+retries (500/502/504/408/429; backoff 0, 2, 4 seconds). Feed and image requests
+use `python-requests/2.33.0` and five retries (500/502/504; backoff 0, 1, 2, 4, 8
+seconds). Retry-After is honored, including standard retryable 413/429/503
+responses. Discovery/gallery requests use 15 seconds, home page and HEAD/image
+requests 10 seconds, feed GET requests 30 seconds. Fifty workers download
+images; there is no rate or bandwidth limit. System proxy environment settings
+(`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`, and supported lowercase
+forms) are inherited by reqwest. There are no application config files or keys.
 
-Product names are quoted before they reach the spreadsheet, so a name beginning with `=` is not run as a formula.
+Every request and redirect checks DNS and the connected peer before consuming
+the body. Private, loopback, link-local, reserved, multicast, unspecified and
+carrier-grade NAT addresses are rejected. XML declarations cannot expand
+entities. Images are capped at 30 MiB and 50 million pixels. Spreadsheet formula
+prefixes are quoted; Windows-forbidden filename characters are replaced by `_`.
 
-## Limits
+Feeds are parsed in memory. There is no resume, bandwidth limiting, or support
+for nonstandard feed endpoint locations. Very long product names or names
+containing filesystem-specific control characters may fail to save.
 
-- No resume. A crash leaves a half filled session folder. Delete it and run again.
-- The image download has no bandwidth limit. A shop with tens of thousands of products can trigger rate limiting at the origin.
-- Discovery assumes the current Shoptet URL convention. A custom template that moves the feed paths fails.
-- The image is fetched over one connection whose peer is checked, but a redirect to a different host is followed by the HTTP library without a second check. Disable redirects if the shop is not trusted at all.
+## Changes from the Python version
+
+- The executable is `shoptet-scraper`; Python module imports and unused legacy
+  helper functions are replaced by typed Rust library APIs. There is no Python
+  runtime. Dynamic non-string spreadsheet values cannot enter the string row API.
+- All CLI help, interactive prompts, progress descriptions and previously Czech
+  messages are English. Clap formats usage and argument errors. The same flags,
+  normal success/failure exit codes and direct universal-feed choice are retained.
+  Unambiguous long-option abbreviations and repeated options remain accepted.
+- `--verbose` now enables DEBUG logs; it was previously ignored.
+- Default output is `./output` relative to the working directory, allowing an
+  installed executable to run anywhere. Python used the directory of main.py.
+- Session allocation is atomic, preventing concurrent runs sharing a folder.
+  Feed filename prefixes also sanitize forbidden characters, fixing URLs with
+  explicit ports producing invalid Windows filenames.
+- Gallery indexes keep the product index separate from the filename suffix,
+  fixing the string-subtraction crash in `--all-images`. Gallery duplicates are
+  removed after size normalization. Gallery mode also supports Google item
+  containers and their lowercase URL/identifier/name fields.
+- Namespaced XML field names are recognized, fixing standard Google feeds losing
+  their images. Spreadsheet fields still use the original uppercase field
+  mapping; lowercase Google titles/prices do not populate uppercase columns.
+  Extraction and row lookup share the same item selection, preferring `item`
+  over `SHOPITEM` even in mixed non-Google feeds, avoiding mismatched rows.
+- Other feed types on custom domains pass validation; the incorrect
+  `shoptet`/`universal.xml` substring restriction is removed.
+- DNS and peer checks also protect feeds, discovery, product pages, and redirect
+  hops. Unsafe redirect destinations are refused. Responses close on every error.
+  Public-address classification uses explicit conservative IP ranges rather
+  than Python ipaddress; special-purpose ranges and mapped IPv6 addresses can
+  therefore be classified differently across Python releases.
+  Missing peer information remains allowed, as in Python; proxies can obscure
+  the final destination's peer. TLS uses rustls roots instead of Requests' CA
+  bundle; Requests-specific CA environment overrides are not implemented.
+- XML DOCTYPE/ENTITY declarations are always refused throughout the document,
+  independent of optional dependencies. Rust XML parsing is stricter about some
+  invalid XML. UTF-8, BOM-marked UTF-16 and XML-declared encodings supported by
+  encoding_rs are decoded explicitly; unsupported encodings fail safely.
+  Encoding detection reads the XML declaration only, so product text containing
+  the word `encoding` is parsed normally.
+  The conservative declaration scan also rejects declaration-like text in XML
+  comments or CDATA. Adjacent XML text/CDATA nodes may be exposed differently
+  by the parser.
+- Images exceeding 50 million pixels are rejected before decoding, rather than
+  Pillow warning at 50 million and failing at 100 million. Codec support is
+  JPEG/PNG/GIF/WebP/BMP/TIFF; unusual Pillow-only formats are unsupported.
+  JPEG encoder implementation, optimization and resulting bytes differ from
+  Pillow, while quality, dimensions, RGB output and white alpha compositing are
+  preserved. Rust's first-frame decoding can differ for animated images.
+- XLSX uses rust_xlsxwriter: ZIP metadata, XML serialization, shared strings,
+  empty-cell representation and document properties differ from openpyxl.
+  Headers, row values, worksheet name and part naming are preserved. Widths
+  follow maximum Unicode length plus two, capped at Excel's 255-character limit.
+- Requests use reqwest's HTTP/TLS stack: generated transport headers, compression
+  implementation, cookie handling, proxy behavior and error wording can differ.
+  Timeouts bound the entire attempt, whereas Requests uses connect/read inactivity
+  timeouts. The documented timeout values, retry counts/statuses/backoff and
+  concurrency are retained. Stream-body failures are not retried, as in Python's
+  streamed downloads. HTTP errors include Rust diagnostics instead of Python
+  exception tracebacks. Discovery reads only the 500-byte preview it needs.
+- URL parsing uses reqwest's URL normalization (including hostname case, IDNs
+  and default ports), which can change derived shop names and keys for unusual
+  input URLs. Unicode shop-name casing uses Rust character mappings and can
+  differ from Python's `str.title()` for expanding case mappings.
+- Console output uses English log messages and workbook-save notices rather than
+  tqdm's terminal progress bars. Ctrl-C exits successfully; EOF at interactive
+  prompts now exits cleanly instead of raising an unexpected-input error.
+- No live website or public DNS access is needed by tests. DNS answers and
+  safety policies are injected in tests only; the CLI has no bypass switch.
 
 ## Development
 
-```bash
-uv run --extra dev ruff check .
-uv run --extra dev pytest -q
+```sh
+cargo build --release
+cargo test
+cargo clippy --all-targets -- -D warnings
+cargo fmt --check
 ```
 
-The suite covers the feed parsing and the safety checks with no network. CI runs both on Python 3.10, 3.11, and 3.12, on Linux and Windows.
+Tests preserve both embedded Python XML fixtures and cover their original
+feed/security cases, CLI exits, local HTTP requests, retry counts, redirects,
+gallery output, JPEG transparency, XLSX contents and part splitting. CI runs
+formatting, Clippy, tests and release builds on Ubuntu and Windows.
+
+Dependencies have specific roles: clap for arguments, chrono for local dates,
+ctrlc for interrupts, reqwest for HTTP/TLS/proxies/cookies/compression, roxmltree
+for XML, encoding_rs for declared feed encodings, scraper for HTML, image for
+image conversion, rust_xlsxwriter for Excel. Test-only httpmock serves local
+responses and zip inspects workbook contents.
 
 ## License
 

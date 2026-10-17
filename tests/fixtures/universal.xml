@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<SHOP>
+  <SHOPITEM>
+    <PRODUCT>Boty Alfa</PRODUCT><URL>https://shop.cz/boty-alfa</URL>
+    <PRICE>500</PRICE><PRICE_VAT>605</PRICE_VAT><VAT>21</VAT>
+    <MANUFACTURER>Alfa</MANUFACTURER><CATEGORYTEXT>Obuv</CATEGORYTEXT>
+    <EAN>8590000000001</EAN><PRODUCTNO>A-1</PRODUCTNO>
+    <DELIVERY_DATE>0</DELIVERY_DATE>
+    <IMGURL>https://shop.cz/img/a1.jpg</IMGURL>
+  </SHOPITEM>
+  <SHOPITEM>
+    <PRODUCT>Boty Beta</PRODUCT><PRODUCTNO>B-2</PRODUCTNO>
+    <IMGURL>https://shop.cz/img/b2.jpg</IMGURL>
+  </SHOPITEM>
+</SHOP>

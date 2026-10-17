@@ -1,4 +1,4 @@
-name: CI
+name: Rust CI
 
 on:
   push:
@@ -7,21 +7,22 @@ on:
     branches: [master, main]
 
 jobs:
-  test:
-    runs-on: ${{ matrix.os }}
+  check:
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        python-version: ["3.10", "3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-
-      - name: Lint (ruff)
-        run: uv run --python ${{ matrix.python-version }} --extra dev ruff check .
-
-      - name: Test (pytest)
-        run: uv run --python ${{ matrix.python-version }} --extra dev pytest -q
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Check formatting
+        run: cargo fmt --check
+      - name: Check lint
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Test offline fixtures and local HTTP mocks
+        run: cargo test --locked
+      - name: Build release
+        run: cargo build --locked --release

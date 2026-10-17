@@ -1,0 +1,23 @@
+[package]
+name = "shoptet-scraper"
+version = "1.0.0"
+edition = "2021"
+authors = ["Jan Alexandr Kopřiva"]
+license = "MIT"
+description = "Discover Shoptet feeds, export Excel workbooks and download product images"
+repository = "https://github.com/koprjaa/shoptet-scraper"
+
+[dependencies]
+chrono = "0.4"
+clap = { version = "4", features = ["derive"] }
+ctrlc = "3"
+encoding_rs = "0.8"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp", "bmp", "tiff"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "gzip", "deflate", "cookies", "socks", "system-proxy"] }
+roxmltree = "0.20"
+rust_xlsxwriter = "0.90"
+scraper = "0.24"
+
+[dev-dependencies]
+httpmock = "0.8"
+zip = { version = "4", default-features = false, features = ["deflate"] }
