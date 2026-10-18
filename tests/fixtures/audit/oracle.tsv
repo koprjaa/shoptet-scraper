@@ -1,0 +1,13 @@
+mixed_comment	6f6b3a313a6c6566747269676874
+mixed_pi	6f6b3a313a6c6566747269676874
+utf16le	6f6b3a313ac5be6c75c5a5
+utf16be	6f6b3a313ac5be6c75c5a5
+latin1	6f6b3a313ac280
+long_decl	6f6b3a313ac5be6c75c5a5
+ascii_invalid	6572726f72
+empty	6572726f72
+bom_crlf	6f6b3a313a610a62
+google_namespace	6f6b3a303a
+empty_doctype	6f6b3a303a
+comment_doctype	6f6b3a313a70726f647563745f31
+cdata_doctype	6f6b3a313a3c21444f4354595045206861726d6c6573733e

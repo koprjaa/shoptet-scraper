@@ -89,6 +89,9 @@ pub fn image_filename(data: &ImageData) -> String {
     )
 }
 pub fn save_workbook(rows: &[Vec<String>], path: &Path, part: usize) -> Result<()> {
+    if rows.iter().any(|row| row.len() > HEADERS.len()) {
+        return Err("Product row has more columns than the header".into());
+    }
     let mut wb = rust_xlsxwriter::Workbook::new();
     let ws = wb.add_worksheet();
     ws.set_name("Sheet")?;
@@ -98,8 +101,10 @@ pub fn save_workbook(rows: &[Vec<String>], path: &Path, part: usize) -> Result<(
     }
     for (r, row) in rows.iter().enumerate() {
         for (col, value) in row.iter().enumerate() {
+            // openpyxl truncates cell text at Excel's 32,767-character limit.
+            let value: String = value.chars().take(32767).collect();
             widths[col] = widths[col].max(value.chars().count());
-            ws.write_string((r + 1) as u32, col as u16, value)?;
+            ws.write_string((r + 1) as u32, col as u16, &value)?;
         }
     }
     for (col, width) in widths.iter().enumerate() {

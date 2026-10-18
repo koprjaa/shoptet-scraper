@@ -64,11 +64,6 @@ pub fn feed(key: &str) -> Feed {
         .unwrap_or(FEEDS[0])
 }
 pub fn parse_xml(text: &str) -> Result<roxmltree::Document<'_>> {
-    if text.to_ascii_lowercase().contains("<!doctype")
-        || text.to_ascii_lowercase().contains("<!entity")
-    {
-        return Err("XML declares a DOCTYPE or an ENTITY, refused".into());
-    }
     Ok(roxmltree::Document::parse(text)?)
 }
 pub fn first_text(node: roxmltree::Node<'_, '_>, tags: &[&str], default: &str) -> String {
@@ -76,11 +71,17 @@ pub fn first_text(node: roxmltree::Node<'_, '_>, tags: &[&str], default: &str) -
         .find_map(|tag| {
             node.children()
                 .find(|n| n.is_element() && n.tag_name().name() == *tag)
-                .and_then(|n| n.text())
+                .map(|n| {
+                    // ElementTree joins text around comments and processing instructions.
+                    n.children()
+                        .take_while(|child| !child.is_element())
+                        .filter(|child| child.is_text())
+                        .map(|child| child.text().unwrap_or(""))
+                        .collect::<String>()
+                })
                 .filter(|t| !t.is_empty())
         })
-        .unwrap_or(default)
-        .to_owned()
+        .unwrap_or_else(|| default.to_owned())
 }
 pub fn find_items<'a, 'b>(doc: &'a roxmltree::Document<'b>) -> Vec<roxmltree::Node<'a, 'b>> {
     for tag in ["item", "SHOPITEM"] {
@@ -175,12 +176,16 @@ pub fn gallery(html: &str) -> Vec<(String, String)> {
 pub fn decode_xml(bytes: &[u8]) -> Result<String> {
     let encoding = if let Some((encoding, _)) = encoding_rs::Encoding::for_bom(bytes) {
         encoding
-    } else if bytes.starts_with(&[0, b'<', 0, b'?']) {
+    } else if bytes.starts_with(&[0, b'<', 0]) {
         encoding_rs::UTF_16BE
-    } else if bytes.starts_with(&[b'<', 0, b'?', 0]) {
+    } else if bytes.starts_with(&[b'<', 0]) {
         encoding_rs::UTF_16LE
     } else {
-        let head = String::from_utf8_lossy(&bytes[..bytes.len().min(512)]);
+        let end = bytes
+            .windows(2)
+            .position(|w| w == b"?>")
+            .map_or(0, |i| i + 2);
+        let head = String::from_utf8_lossy(&bytes[..end]);
         let declaration = head
             .strip_prefix("<?xml ")
             .or_else(|| head.strip_prefix("<?xml\t"))
@@ -199,6 +204,19 @@ pub fn decode_xml(bytes: &[u8]) -> Result<String> {
                 return Err("Invalid XML encoding declaration".into());
             }
             let name = tail[1..].split(quote).next().unwrap_or("");
+            // Web encoding aliases differ from XML's strict ASCII and Latin-1 codecs.
+            if matches!(name.to_ascii_lowercase().as_str(), "ascii" | "us-ascii") {
+                if !bytes.is_ascii() {
+                    return Err("Invalid ASCII XML encoding".into());
+                }
+                return Ok(String::from_utf8(bytes.to_vec())?);
+            }
+            if matches!(
+                name.to_ascii_lowercase().as_str(),
+                "iso-8859-1" | "iso8859-1" | "latin-1" | "latin1"
+            ) {
+                return Ok(bytes.iter().map(|b| char::from(*b)).collect());
+            }
             encoding_rs::Encoding::for_label(name.as_bytes()).ok_or("Unknown XML encoding")?
         } else {
             encoding_rs::UTF_8
@@ -209,4 +227,40 @@ pub fn decode_xml(bytes: &[u8]) -> Result<String> {
         return Err("Invalid XML encoding".into());
     }
     Ok(text.into_owned())
+}
+
+/// Honor the page's byte-order mark and HTML charset metadata before selecting images.
+pub fn decode_html(bytes: &[u8]) -> String {
+    if let Some((encoding, _)) = encoding_rs::Encoding::for_bom(bytes) {
+        return encoding.decode(bytes).0.into_owned();
+    }
+    let preview = String::from_utf8_lossy(bytes);
+    let doc = scraper::Html::parse_document(&preview);
+    let selector = scraper::Selector::parse("meta").unwrap();
+    for meta in doc.select(&selector) {
+        let label = meta.value().attr("charset").map(str::to_owned).or_else(|| {
+            if !meta
+                .value()
+                .attr("http-equiv")
+                .is_some_and(|s| s.eq_ignore_ascii_case("content-type"))
+            {
+                return None;
+            }
+            let content = meta.value().attr("content")?;
+            let lowered = content.to_ascii_lowercase();
+            let position = lowered.find("charset=")? + 8;
+            Some(
+                content[position..]
+                    .split(';')
+                    .next()?
+                    .trim()
+                    .trim_matches(['\'', '"'])
+                    .to_owned(),
+            )
+        });
+        if let Some(encoding) = label.and_then(|s| encoding_rs::Encoding::for_label(s.as_bytes())) {
+            return encoding.decode(bytes).0.into_owned();
+        }
+    }
+    preview.into_owned()
 }

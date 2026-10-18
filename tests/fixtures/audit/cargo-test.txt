@@ -1,0 +1,153 @@
+   Compiling shoptet-scraper v1.0.0 (/work)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.90s
+     Running unittests src/lib.rs (target/debug/deps/shoptet_scraper-22610132a91d1a38)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/shoptet_scraper-93d4ef8f584eb66f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/audit.rs (target/debug/deps/audit-b4b91cb1bb62d51c)
+
+running 4 tests
+test excessive_spreadsheet_columns_return_error ... ok
+test html_charset_preserves_gallery_urls_and_alt_text ... ok
+test python_xml_oracle ... ok
+test long_spreadsheet_cells_are_truncated_like_openpyxl ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/cli.rs (target/debug/deps/cli-b91d92c4b4e245b2)
+
+running 7 tests
+test help_succeeds_without_creating_output ... ok
+test fatal_output_error_exits_one ... ok
+test eof_exits_cleanly ... ok
+test blank_interactive_input_returns_zero ... ok
+test abbreviated_and_repeated_options_remain_compatible ... ok
+test unsafe_direct_store_returns_zero_and_logs ... ok
+test argument_errors_exit_two ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+     Running tests/feeds.rs (target/debug/deps/feeds-db529b0ba4f88c83)
+
+running 29 tests
+test a_parser_exists_for_every_feed_type ... ok
+test an_unknown_feed_type_is_read_as_a_universal_feed ... ok
+test an_empty_feed_yields_nothing ... ok
+test a_feed_declaring_entities_is_refused ... ok
+test a_malformed_feed_returns_none ... ok
+test a_feed_file_is_parsed ... ok
+test a_product_without_an_image_is_left_out ... ok
+test a_missing_product_number_gets_a_generated_one ... ok
+test a_universal_feed_yields_every_image ... ok
+test a_google_feed_yields_every_image ... ok
+test a_heureka_feed_yields_every_image ... ok
+test a_product_row_follows_the_header_order ... ok
+test every_feed_type_declares_the_same_columns ... ok
+test encoding_in_product_text_is_not_an_xml_declaration ... ok
+test every_feed_type_has_a_path_and_a_name ... ok
+test first_text_does_not_discard_an_element_without_children ... ok
+test first_text_falls_back_to_the_default ... ok
+test first_text_prefers_the_earlier_tag ... ok
+test first_text_returns_the_first_tag_that_has_a_value ... ok
+test first_text_skips_a_tag_that_is_present_but_empty ... ok
+test indexes_include_products_without_images ... ok
+test item_container_has_priority_and_root_is_excluded ... ok
+test missing_product_fields_become_empty_strings ... ok
+test namespaced_google_images_are_supported ... ok
+test the_index_counts_products_from_one ... ok
+test the_three_feed_shapes_agree_on_what_they_return ... ok
+test utf16_feeds_decode_before_parsing ... ok
+test whitespace_is_a_value ... ok
+test xml_encoding_declarations_are_respected ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/network.rs (target/debug/deps/network-5b7435b3b2486ef0)
+
+running 16 tests
+test backoff_matches_urllib3_schedule ... ok
+test retry_after_is_bounded_for_untrusted_servers ... ok
+test nonretryable_status_is_not_retried ... ok
+test a_public_peer_is_read_normally_with_mocked_policy ... ok
+test redirect_to_disallowed_path_is_never_fetched ... ok
+test a_valid_redirect_is_followed ... ok
+test a_connection_that_landed_on_a_private_address_is_dropped ... ok
+test the_peer_address_is_read_off_the_socket ... ok
+test unsafe_redirect_is_not_followed ... ok
+test discovery_uses_browser_headers_and_xml_content_type ... ok
+test discovery_ignores_invalid_utf8_like_python ... ok
+test availability_uses_head_requests_default_headers_and_no_redirects ... ok
+test discovery_falls_back_to_body_and_homepage ... ok
+test retry_status_and_retry_after_are_honored ... ok
+test a_slow_response_has_a_timeout ... ok
+test feed_has_six_attempts ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.09s
+
+     Running tests/pipeline.rs (target/debug/deps/pipeline-563a2efc8caeff11)
+
+running 13 tests
+test explicit_port_does_not_make_windows_filename_invalid ... ok
+test gallery_normalizes_before_deduplicating_and_preserves_alt ... ok
+test image_pixel_limit_is_checked_before_decode ... ok
+test logging_appends_and_verbose_controls_debug_messages ... ok
+test numbered_sessions_fill_gaps_without_overwriting ... ok
+test transparent_images_are_white_jpeg ... ok
+test gallery_mode_accepts_google_item_links ... ok
+test concurrent_runs_create_distinct_session_directories ... ok
+test custom_domain_nonuniversal_feed_is_downloaded ... ok
+test no_images_retains_xml_and_does_not_write_workbook ... ok
+test malformed_feed_is_retained_and_logged_without_a_workbook ... ok
+test gallery_mode_produces_multiple_rows_and_cleans_xml ... ok
+test image_failures_still_write_rows_and_split_at_1000 ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.93s
+
+     Running tests/security.rs (target/debug/deps/security-3278dfd16c824bc2)
+
+running 28 tests
+test a_public_socket_peer_is_safe ... ok
+test a_public_peer_is_read_normally ... ok
+test a_negative_number_written_as_text_is_quoted ... ok
+test a_plain_product_name_is_left_alone ... ok
+test a_path_cannot_be_smuggled_through_a_product_name ... ok
+test a_character_windows_forbids_is_replaced ... ok
+test a_normal_image_comes_back_whole ... ok
+test a_nonsense_content_length_header_does_not_crash ... ok
+test a_declared_size_over_the_limit_is_refused ... ok
+test a_response_without_a_socket_reports_no_peer ... ok
+test a_plain_feed_parses ... ok
+test a_hostname_that_does_not_resolve_is_refused ... ok
+test a_public_address_is_allowed ... ok
+test a_url_without_a_host_is_refused ... ok
+test a_value_a_spreadsheet_would_run_is_quoted ... ok
+test a_value_that_is_not_text_passes_through ... ok
+test an_address_on_this_machine_or_network_is_refused ... ok
+test an_entity_expansion_payload_is_refused ... ok
+test an_external_entity_is_refused ... ok
+test an_overflowing_declared_size_is_refused ... ok
+test czech_characters_survive ... ok
+test declarations_beyond_the_old_fallback_prefix_are_rejected ... ok
+test every_private_peer_is_refused_after_connecting ... ok
+test mixed_dns_answers_are_refused ... ok
+test a_server_that_lies_about_the_size_is_still_stopped ... ok
+test reserved_ipv4_and_mapped_ipv6_are_blocked ... ok
+test only_http_and_https_are_allowed ... ok
+test an_unsafe_url_is_not_fetched ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+   Doc-tests shoptet_scraper
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

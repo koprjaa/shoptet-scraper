@@ -1,0 +1,10 @@
+gallery_duplicate [('https://x/orig/a', ''), ('https://x/orig/a', '')] requests ['/redirect', '/gallery']
+image_redirect_to_disallowed True
+custom_google_validate False
+gallery_workbook TypeError unsupported operand type(s) for -: 'str' and 'int'
+google_gallery []
+pixel_limit (10000, 6000) ['DecompressionBombWarning']
+preview_discovery True
+html_encoding https://example.invalid/big/žluť kůň
+concurrent_sessions 1
+Python Retry-After 999999: 21600

@@ -1,0 +1,16 @@
+mixed_comment 'ok:1:leftright'
+mixed_pi 'ok:1:leftright'
+utf16le 'ok:1:žluť'
+utf16be 'ok:1:žluť'
+latin1 'ok:1:\x80'
+long_decl 'ok:1:žluť'
+ascii_invalid 'error'
+empty 'error'
+bom_crlf 'ok:1:a\nb'
+google_namespace 'ok:0:'
+empty_doctype 'ok:0:'
+comment_doctype 'ok:1:product_1'
+cdata_doctype 'ok:1:<!DOCTYPE harmless>'
+long_cell 32767
+........................................................................ [ 90%]
+........                                                                 [100%]

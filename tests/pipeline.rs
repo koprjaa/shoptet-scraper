@@ -193,21 +193,9 @@ fn explicit_port_does_not_make_windows_filename_invalid() {
 #[test]
 fn image_pixel_limit_is_checked_before_decode() {
     let t = Temp::default();
-    // A valid PNG header advertises a bomb without allocating its pixel buffer.
-    let mut bytes = png();
-    bytes[16..20].copy_from_slice(&10000u32.to_be_bytes());
-    bytes[20..24].copy_from_slice(&10000u32.to_be_bytes());
-    let mut crc = u32::MAX;
-    for byte in &bytes[12..29] {
-        crc ^= u32::from(*byte);
-        for _ in 0..8 {
-            crc = (crc >> 1) ^ (0xedb88320 & 0u32.wrapping_sub(crc & 1));
-        }
-    }
-    bytes[29..33].copy_from_slice(&(!crc).to_be_bytes());
-    let error = jpeg(&bytes, &t.0.join("large.jpg"))
-        .unwrap_err()
-        .to_string();
+    // Use the exact 60-million-pixel header opened by the Python oracle.
+    let bytes = include_bytes!("fixtures/audit/large-header.png");
+    let error = jpeg(bytes, &t.0.join("large.jpg")).unwrap_err().to_string();
     assert!(error.contains("50000000"), "{error}");
 }
 
@@ -269,4 +257,49 @@ fn logging_appends_and_verbose_controls_debug_messages() {
     assert!(lines[0].ends_with(" - INFO -  first"));
     assert!(lines[1].ends_with(" - DEBUG -  second"));
     assert_eq!(lines[0].as_bytes()[19], b',');
+}
+
+#[test]
+fn concurrent_runs_create_distinct_session_directories() {
+    let tmp = Temp::default();
+    let mut paths = std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..8)
+            .map(|_| {
+                let base = &tmp.0;
+                scope.spawn(move || session_path(base, "2026-10-18").unwrap())
+            })
+            .collect();
+        workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    paths.sort();
+    paths.dedup();
+    assert_eq!(paths.len(), 8);
+}
+
+#[test]
+fn gallery_mode_accepts_google_item_links() {
+    let server = MockServer::start();
+    let page = server.mock(|w, t| {
+        w.path("/product");
+        t.body("<a class='p-main-image' href='https://x/big/a'></a>");
+    });
+    let xml = format!(
+        "<rss><item><id>A</id><title>name</title><link>{}/product</link></item></rss>",
+        server.base_url()
+    );
+    let doc = shoptet_scraper::parse_xml(&xml).unwrap();
+    let tmp = Temp::default();
+    let logger = Logger::new(&tmp.0.join("log"), false).unwrap();
+    let data = shoptet_scraper::app::gallery_data(
+        &Http::with_policy(|_| true, |_| true).unwrap(),
+        &logger,
+        &doc,
+    );
+    assert_eq!(data.len(), 1);
+    assert_eq!(data[0].number, "A");
+    assert_eq!(data[0].suffix, "1_1");
+    page.assert();
 }

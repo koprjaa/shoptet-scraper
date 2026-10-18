@@ -197,6 +197,7 @@ pub fn run_scraper(
         Ok(text) => text,
         Err(e) => {
             logger.error(&format!(" Could not parse {}: {e}", feed.name));
+            logger.error(" Could not parse the feed");
             return Ok(());
         }
     };
@@ -246,7 +247,7 @@ pub fn gallery_data(http: &Http, logger: &Logger, doc: &roxmltree::Document<'_>)
         }
         match http.bytes(&url, 15, Session::Discovery) {
             Ok(bytes) => {
-                let images = gallery(&String::from_utf8_lossy(&bytes));
+                let images = gallery(&crate::decode_html(&bytes));
                 logger.info(&format!(
                     " Found {} images for product: {url}",
                     images.len()

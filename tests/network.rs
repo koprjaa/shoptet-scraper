@@ -189,3 +189,66 @@ fn availability_uses_head_requests_default_headers_and_no_redirects() {
     assert!(!available(&local(), &log, &store, FEEDS[1]));
     m.assert();
 }
+
+#[test]
+fn retry_after_is_bounded_for_untrusted_servers() {
+    use shoptet_scraper::network::retry_after;
+    assert_eq!(
+        retry_after("9999999999999999999999999999"),
+        Some(Duration::from_secs(120))
+    );
+    assert_eq!(retry_after("999999"), Some(Duration::from_secs(120)));
+    assert_eq!(retry_after("2"), Some(Duration::from_secs(2)));
+    assert_eq!(retry_after("0"), Some(Duration::ZERO));
+    assert_eq!(
+        retry_after("Fri, 31 Dec 9999 23:59:59 GMT"),
+        Some(Duration::from_secs(120))
+    );
+    assert_eq!(
+        retry_after("Wed, 01 Jan 2020 00:00:00 GMT"),
+        Some(Duration::ZERO)
+    );
+    assert!(retry_after("nonsense").is_none());
+}
+#[test]
+fn a_slow_response_has_a_timeout() {
+    let server = MockServer::start();
+    let m = server.mock(|w, t| {
+        w.path("/");
+        t.delay(Duration::from_millis(1200)).body("late");
+    });
+    assert!(local()
+        .bytes(&server.base_url(), 1, Session::Discovery)
+        .is_err());
+    m.assert_calls(4);
+}
+
+#[test]
+fn discovery_ignores_invalid_utf8_like_python() {
+    let server = MockServer::start();
+    let mock = server.mock(|w, t| {
+        w.path("/universal.xml");
+        t.body(b"<\xffSHOP>");
+    });
+    let tmp = Temp::default();
+    let logger = Logger::new(&tmp.0.join("log"), false).unwrap();
+    assert!(discover(&local(), &logger, &server.base_url()).is_some());
+    mock.assert();
+}
+
+#[test]
+fn redirect_to_disallowed_path_is_never_fetched() {
+    let server = MockServer::start();
+    let redirect = server.mock(|w, t| {
+        w.path("/redirect");
+        t.status(302).header("location", "/gallery");
+    });
+    let target = server.mock(|w, t| {
+        w.path("/gallery");
+        t.body("private");
+    });
+    let http = Http::with_policy(|u| !u.ends_with("/gallery"), |_| true).unwrap();
+    assert!(http.image(&server.url("/redirect")).is_err());
+    redirect.assert();
+    target.assert_calls(0);
+}

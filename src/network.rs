@@ -96,7 +96,11 @@ impl Http {
                             || (r.headers().contains_key(header::RETRY_AFTER)
                                 && matches!(r.status().as_u16(), 413 | 429 | 503));
                         if retry && attempt < retries {
-                            let delay = retry_after(&r)
+                            let delay = r
+                                .headers()
+                                .get(header::RETRY_AFTER)
+                                .and_then(|v| v.to_str().ok())
+                                .and_then(retry_after)
                                 .filter(|d| !d.is_zero())
                                 .unwrap_or_else(|| backoff(attempt, factor));
                             drop(r);
@@ -157,7 +161,24 @@ impl Http {
     pub fn preview(&self, mut r: Response) -> Result<String> {
         let mut data = vec![];
         Read::take(&mut r, 500).read_to_end(&mut data)?;
-        Ok(String::from_utf8_lossy(&data).into_owned())
+        let mut remaining = data.as_slice();
+        let mut text = String::new();
+        while !remaining.is_empty() {
+            match std::str::from_utf8(remaining) {
+                Ok(valid) => {
+                    text.push_str(valid);
+                    break;
+                }
+                Err(error) => {
+                    let valid = error.valid_up_to();
+                    text.push_str(std::str::from_utf8(&remaining[..valid])?);
+                    // Python's discovery preview decodes with errors="ignore".
+                    let skipped = error.error_len().unwrap_or(remaining.len() - valid);
+                    remaining = &remaining[valid + skipped..];
+                }
+            }
+        }
+        Ok(text)
     }
 }
 pub fn backoff(attempt: usize, factor: f64) -> Duration {
@@ -167,13 +188,17 @@ pub fn backoff(attempt: usize, factor: f64) -> Duration {
         Duration::from_secs_f64((factor * 2f64.powi(attempt as i32)).min(120.0))
     }
 }
-fn retry_after(r: &Response) -> Option<Duration> {
-    let value = r.headers().get(header::RETRY_AFTER)?.to_str().ok()?;
-    if let Ok(n) = value.parse::<u64>() {
-        return Some(Duration::from_secs(n));
+// A server-controlled Retry-After must not suspend a worker for years.
+pub fn retry_after(value: &str) -> Option<Duration> {
+    if value.bytes().all(|b| b.is_ascii_digit()) && !value.is_empty() {
+        return Some(Duration::from_secs(
+            value.parse::<u64>().unwrap_or(u64::MAX).min(120),
+        ));
     }
     let date = chrono::DateTime::parse_from_rfc2822(value).ok()?;
     Some(Duration::from_secs(
-        (date.timestamp() - chrono::Utc::now().timestamp()).max(0) as u64,
+        date.timestamp()
+            .saturating_sub(chrono::Utc::now().timestamp())
+            .clamp(0, 120) as u64,
     ))
 }

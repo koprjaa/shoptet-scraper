@@ -20,9 +20,9 @@ jobs:
           components: rustfmt, clippy
       - name: Check formatting
         run: cargo fmt --check
-      - name: Check lint
+      - name: Lint all Rust targets
         run: cargo clippy --locked --all-targets -- -D warnings
-      - name: Test offline fixtures and local HTTP mocks
+      - name: Run regression, CLI and local HTTP tests
         run: cargo test --locked
       - name: Build release
         run: cargo build --locked --release

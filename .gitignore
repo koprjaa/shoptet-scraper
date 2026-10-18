@@ -2,6 +2,7 @@
 /output/
 /tests/.runtime/
 *.log
+*.xlsx
 .env
 .vscode/
 .idea/
@@ -80,7 +81,6 @@ dmypy.json
 .pyre/
 shoptet_scraper.log
 *.xml
-*.xlsx
 *.jpg
 *.jpeg
 *.png
@@ -107,5 +107,4 @@ tmp/
 .ruff_cache/
 uv.lock
 .venv/
-
 !tests/fixtures/*.xml

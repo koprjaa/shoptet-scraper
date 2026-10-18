@@ -1,0 +1,38 @@
+running 3 tests
+mixed_comment: "ok:1:left"
+mixed_pi: "ok:1:left"
+
+thread 'excessive_spreadsheet_columns_return_error' (4226) panicked at src/output.rs:101:33:
+index out of bounds: the len is 11 but the index is 11
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'long_spreadsheet_cells_are_truncated_like_openpyxl' (4227) panicked at tests/audit.rs:32:73:
+called `Result::unwrap()` on an `Err` value: MaxStringLengthExceeded
+utf16le: "error"
+utf16be: "error"
+latin1: "ok:1:€"
+test long_spreadsheet_cells_are_truncated_like_openpyxl ... FAILED
+test excessive_spreadsheet_columns_return_error ... FAILED
+long_decl: "error"
+ascii_invalid: "ok:0:"
+empty: "error"
+bom_crlf: "ok:1:a\nb"
+google_namespace: "ok:1:name"
+empty_doctype: "error"
+comment_doctype: "error"
+cdata_doctype: "error"
+
+thread 'python_xml_oracle' (4228) panicked at tests/audit.rs:27:5:
+Differences: ["mixed_comment", "mixed_pi", "utf16le", "utf16be", "latin1", "long_decl", "ascii_invalid", "comment_doctype", "cdata_doctype"]
+test python_xml_oracle ... FAILED
+
+failures:
+
+failures:
+    excessive_spreadsheet_columns_return_error
+    long_spreadsheet_cells_are_truncated_like_openpyxl
+    python_xml_oracle
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `--test audit`
