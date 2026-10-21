@@ -81,12 +81,11 @@ pub fn jpeg(bytes: &[u8], path: &Path) -> Result<()> {
     Ok(())
 }
 pub fn image_filename(data: &ImageData) -> String {
-    format!(
-        "{}_{}_{}.jpg",
-        sanitize_filename(&data.name),
-        sanitize_filename(&data.number),
-        data.suffix
-    )
+    let mut name = sanitize_filename(&data.name);
+    let tail = format!("_{}_{}.jpg", sanitize_filename(&data.number), data.suffix);
+    // File systems cap a name at 255 bytes; shorten the product name, keep number and index.
+    while name.len() + tail.len() > 250 && name.pop().is_some() {}
+    format!("{name}{tail}")
 }
 pub fn save_workbook(rows: &[Vec<String>], path: &Path, part: usize) -> Result<()> {
     if rows.iter().any(|row| row.len() > HEADERS.len()) {

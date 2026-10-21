@@ -38,7 +38,7 @@ fn argument_errors_exit_two() {
     }
 }
 #[test]
-fn unsafe_direct_store_returns_zero_and_logs() {
+fn unsafe_direct_store_exits_one_and_logs() {
     let t = Temp::default();
     let o = cmd(&t)
         .args([
@@ -51,7 +51,7 @@ fn unsafe_direct_store_returns_zero_and_logs() {
         ])
         .output()
         .unwrap();
-    assert!(o.status.success());
+    assert_eq!(o.status.code(), Some(1));
     let log = std::fs::read_to_string(t.0.join("shoptet_scraper.log")).unwrap();
     assert!(log.contains("Refused unsafe shop URL"));
     assert!(log.contains("No Shoptet shop at URL"));
@@ -115,11 +115,32 @@ fn abbreviated_and_repeated_options_remain_compatible() {
         ])
         .output()
         .unwrap();
-    assert!(
-        output.status.success(),
+    // The URL is refused, which is an error; the options themselves were understood.
+    assert_eq!(
+        output.status.code(),
+        Some(1),
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(t.0.join("second").is_dir());
     assert!(!t.0.join("first").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn interrupt_exits_with_130() {
+    let t = Temp::default();
+    let mut child = cmd(&t)
+        .arg("eshop")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1500));
+    Command::new("kill")
+        .args(["-INT", &child.id().to_string()])
+        .status()
+        .unwrap();
+    assert_eq!(child.wait().unwrap().code(), Some(130));
 }

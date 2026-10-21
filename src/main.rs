@@ -45,6 +45,7 @@ fn run(args: Args) -> Result<()> {
             app::run_scraper(&http, &logger, &store, FEEDS[0], &session, args.all_images)?;
         } else {
             logger.error(&format!(" No Shoptet shop at URL: {url}"));
+            return Err(format!("No Shoptet shop at URL: {url}").into());
         }
     } else {
         app::interactive(&http, &logger, &session, args.all_images)?;
@@ -55,7 +56,7 @@ fn main() {
     let args = Args::parse();
     if let Err(e) = ctrlc::set_handler(|| {
         println!("\n Shutting down...");
-        std::process::exit(0);
+        std::process::exit(130);
     }) {
         eprintln!("Could not install interrupt handler: {e}");
     }

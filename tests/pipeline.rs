@@ -7,11 +7,11 @@ mod common;
 use common::Temp;
 use httpmock::{Method::GET, MockServer};
 use shoptet_scraper::{
-    app::{run_scraper, store_config},
+    app::{gallery_data, run_scraper, store_config},
     gallery,
     network::Http,
-    output::{jpeg, session_path, Logger},
-    FEEDS,
+    output::{image_filename, jpeg, session_path, Logger},
+    ImageData, FEEDS,
 };
 use std::{
     io::{Cursor, Read},
@@ -218,7 +218,7 @@ fn malformed_feed_is_retained_and_logged_without_a_workbook() {
         &tmp.0,
         false,
     )
-    .unwrap();
+    .unwrap_err();
     let files: Vec<_> = std::fs::read_dir(
         tmp.0
             .join(shoptet_scraper::security::sanitize_filename(&store.name)),
@@ -302,4 +302,92 @@ fn gallery_mode_accepts_google_item_links() {
     assert_eq!(data[0].number, "A");
     assert_eq!(data[0].suffix, "1_1");
     page.assert();
+}
+
+#[test]
+fn a_failed_feed_download_is_an_error() {
+    let server = MockServer::start();
+    server.mock(|w, t| {
+        w.path("/universal.xml");
+        t.status(404);
+    });
+    let tmp = Temp::default();
+    let log = Logger::new(&tmp.0.join("log"), false).unwrap();
+    let store = store_config(&server.base_url()).unwrap();
+    let error = run_scraper(
+        &Http::with_policy(|_| true, |_| true).unwrap(),
+        &log,
+        &store,
+        FEEDS[0],
+        &tmp.0,
+        false,
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("Could not download"), "{error}");
+}
+#[test]
+fn rows_follow_the_feed_not_the_download_order() {
+    let server = MockServer::start();
+    let base = server.base_url();
+    server.mock(|w,t|{w.path("/universal.xml");t.body(format!("<SHOP><SHOPITEM><PRODUCT>First</PRODUCT><PRODUCTNO>1</PRODUCTNO><IMGURL>{base}/slow.png</IMGURL></SHOPITEM><SHOPITEM><PRODUCT>Second</PRODUCT><PRODUCTNO>2</PRODUCTNO><IMGURL>{base}/fast.png</IMGURL></SHOPITEM></SHOP>"));});
+    server.mock(|w, t| {
+        w.path("/slow.png");
+        t.delay(std::time::Duration::from_millis(800)).body(png());
+    });
+    server.mock(|w, t| {
+        w.path("/fast.png");
+        t.body(png());
+    });
+    let tmp = Temp::default();
+    let log = Logger::new(&tmp.0.join("log"), false).unwrap();
+    let store = store_config(&base).unwrap();
+    run_scraper(
+        &Http::with_policy(|_| true, |_| true).unwrap(),
+        &log,
+        &store,
+        FEEDS[0],
+        &tmp.0,
+        false,
+    )
+    .unwrap();
+    let book = std::fs::read_dir(
+        tmp.0
+            .join(shoptet_scraper::security::sanitize_filename(&store.name)),
+    )
+    .unwrap()
+    .map(|e| e.unwrap().path())
+    .find(|p| p.extension().is_some_and(|e| e == "xlsx"))
+    .unwrap();
+    let strings = xml_file(&book, "xl/sharedStrings.xml");
+    assert!(strings.find("First").unwrap() < strings.find("Second").unwrap());
+}
+#[test]
+fn gallery_images_linked_relative_to_the_product_page_are_resolved() {
+    let server = MockServer::start();
+    let base = server.base_url();
+    server.mock(|w, t| {
+        w.path("/shop/product");
+        t.body("<a class='p-main-image' href='/user/shop/big/a.jpg'></a>");
+    });
+    let xml = format!(
+        "<SHOP><SHOPITEM><PRODUCT>P</PRODUCT><URL>{base}/shop/product</URL></SHOPITEM></SHOP>"
+    );
+    let doc = roxmltree::Document::parse(&xml).unwrap();
+    let tmp = Temp::default();
+    let log = Logger::new(&tmp.0.join("log"), false).unwrap();
+    let data = gallery_data(&Http::with_policy(|_| true, |_| true).unwrap(), &log, &doc);
+    assert_eq!(data[0].url, format!("{base}/user/shop/orig/a.jpg"));
+}
+#[test]
+fn a_long_product_name_cannot_exceed_the_file_name_limit() {
+    let image = ImageData {
+        index: 1,
+        suffix: "7".into(),
+        url: String::new(),
+        number: "ABC".into(),
+        name: "Ž".repeat(300),
+    };
+    let name = image_filename(&image);
+    assert!(name.len() <= 255, "{}", name.len());
+    assert!(name.ends_with("_ABC_7.jpg"));
 }

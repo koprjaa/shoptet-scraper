@@ -164,7 +164,7 @@ pub fn run_scraper(
     let url = format!("{}{}", store.base_url.trim_end_matches('/'), feed.path);
     if !http.safe(&url) {
         logger.error(&format!(" Invalid URL: {url}"));
-        return Ok(());
+        return Err(format!("Invalid URL: {url}").into());
     }
     logger.info(&format!(" Downloading {} from: {url}", feed.name));
     let xml_path = folder.join(format!(
@@ -184,7 +184,7 @@ pub fn run_scraper(
     if let Err(e) = downloaded {
         logger.error(&format!(" Could not download {}: {e}", feed.name));
         logger.error(" Could not download the feed");
-        return Ok(());
+        return Err(format!("Could not download {}: {e}", feed.name).into());
     }
     logger.info(&format!(
         " {} downloaded: {}",
@@ -198,7 +198,7 @@ pub fn run_scraper(
         Err(e) => {
             logger.error(&format!(" Could not parse {}: {e}", feed.name));
             logger.error(" Could not parse the feed");
-            return Ok(());
+            return Err(format!("Could not parse {}: {e}", feed.name).into());
         }
     };
     let doc = match parse_xml(&text) {
@@ -206,7 +206,7 @@ pub fn run_scraper(
         Err(e) => {
             logger.error(&format!(" Could not parse {}: {e}", feed.name));
             logger.error(" Could not parse the feed");
-            return Ok(());
+            return Err(format!("Could not parse {}: {e}", feed.name).into());
         }
     };
     logger.info(&format!(" {} parsed: {}", feed.name, xml_path.display()));
@@ -252,12 +252,18 @@ pub fn gallery_data(http: &Http, logger: &Logger, doc: &roxmltree::Document<'_>)
                     " Found {} images for product: {url}",
                     images.len()
                 ));
-                for (j, (url, _)) in images.into_iter().enumerate() {
+                let page = reqwest::Url::parse(&url).ok();
+                for (j, (image, _)) in images.into_iter().enumerate() {
+                    // Galleries may link images relative to the product page.
+                    let image = page
+                        .as_ref()
+                        .and_then(|page| page.join(&image).ok())
+                        .map_or(image, String::from);
                     let default = format!("product_{}", i + 1);
                     result.push(ImageData {
                         index: i + 1,
                         suffix: format!("{}_{}", i + 1, j + 1),
-                        url,
+                        url: image,
                         number: first_text(*item, &["id", "PRODUCTNO"], &default),
                         name: first_text(*item, &["title", "PRODUCT"], &default),
                     });
@@ -289,6 +295,7 @@ pub fn process_products(
     let mut rows = vec![];
     let mut total = 0;
     let mut part = 1;
+    let mut saved = vec![None; data.len()];
     let (tx, rx) = mpsc::channel();
     let next = AtomicUsize::new(0);
     std::thread::scope(|scope| -> Result<()> {
@@ -325,19 +332,23 @@ pub fn process_products(
         }
         drop(tx);
         for (i, filename) in rx {
-            let image = &data[i];
-            if let Some(item) = image.index.checked_sub(1).and_then(|i| items.get(i)) {
-                rows.push(product_row(*item, &image.number, &filename));
-                total += 1;
-                if rows.len() == 1000 {
-                    save_part(&rows, folder, store, feed, part)?;
-                    rows.clear();
-                    part += 1;
-                }
-            }
+            saved[i] = Some(filename);
         }
         Ok(())
     })?;
+    // Rows follow the feed, not the order the downloads happened to finish in.
+    for (image, filename) in data.iter().zip(saved) {
+        let filename = filename.unwrap_or_default();
+        if let Some(item) = image.index.checked_sub(1).and_then(|i| items.get(i)) {
+            rows.push(product_row(*item, &image.number, &filename));
+            total += 1;
+            if rows.len() == 1000 {
+                save_part(&rows, folder, store, feed, part)?;
+                rows.clear();
+                part += 1;
+            }
+        }
+    }
     if !rows.is_empty() {
         save_part(&rows, folder, store, feed, part)?;
     }
