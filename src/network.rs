@@ -11,7 +11,31 @@ use reqwest::{
     blocking::{Client, Response},
     header, Method, Url,
 };
-use std::{io::Read, sync::Arc, time::Duration};
+use std::{
+    io::Read,
+    net::{IpAddr, SocketAddr, ToSocketAddrs},
+    sync::Arc,
+    time::Duration,
+};
+type PeerPolicy = Arc<dyn Fn(IpAddr) -> bool + Send + Sync>;
+/// Resolves names itself and drops refused addresses, so the connection is made
+/// to an address that passed the check (a second lookup cannot swap it).
+struct GuardedResolver(PeerPolicy);
+impl reqwest::dns::Resolve for GuardedResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let peer = Arc::clone(&self.0);
+        Box::pin(async move {
+            let allowed: Vec<SocketAddr> = (name.as_str(), 0)
+                .to_socket_addrs()?
+                .filter(|a| peer(a.ip()))
+                .collect();
+            if allowed.is_empty() {
+                return Err("Refused unsafe peer address".into());
+            }
+            Ok(Box::new(allowed.into_iter()) as reqwest::dns::Addrs)
+        })
+    }
+}
 pub const BROWSER_UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
 pub const REQUESTS_UA: &str = "python-requests/2.33.0";
 #[derive(Clone, Copy)]
@@ -24,7 +48,7 @@ pub struct Http {
     browser: Client,
     feed: Client,
     policy: Arc<dyn Fn(&str) -> bool + Send + Sync>,
-    peer_policy: Arc<dyn Fn(std::net::IpAddr) -> bool + Send + Sync>,
+    peer_policy: PeerPolicy,
 }
 impl Http {
     pub fn new() -> Result<Self> {
@@ -35,7 +59,7 @@ impl Http {
         url: impl Fn(&str) -> bool + Send + Sync + 'static,
         peer: impl Fn(std::net::IpAddr) -> bool + Send + Sync + 'static,
     ) -> Result<Self> {
-        fn client(ua: &str) -> Result<Client> {
+        fn client(ua: &str, peer: &PeerPolicy) -> Result<Client> {
             let mut headers = header::HeaderMap::new();
             headers.insert(header::ACCEPT, header::HeaderValue::from_static("*/*"));
             headers.insert(
@@ -48,13 +72,15 @@ impl Http {
                 .cookie_store(true)
                 .pool_max_idle_per_host(100)
                 .redirect(reqwest::redirect::Policy::none())
+                .dns_resolver(Arc::new(GuardedResolver(Arc::clone(peer))))
                 .build()?)
         }
+        let peer: PeerPolicy = Arc::new(peer);
         Ok(Self {
-            browser: client(BROWSER_UA)?,
-            feed: client(REQUESTS_UA)?,
+            browser: client(BROWSER_UA, &peer)?,
+            feed: client(REQUESTS_UA, &peer)?,
             policy: Arc::new(url),
-            peer_policy: Arc::new(peer),
+            peer_policy: peer,
         })
     }
     pub fn fresh(&self) -> Result<Self> {

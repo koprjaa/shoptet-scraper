@@ -252,3 +252,17 @@ fn redirect_to_disallowed_path_is_never_fetched() {
     redirect.assert();
     target.assert_calls(0);
 }
+#[test]
+fn a_name_resolving_to_a_refused_address_is_never_connected() {
+    let server = MockServer::start();
+    let m = server.mock(|w, t| {
+        w.path("/image");
+        t.body("must not be requested");
+    });
+    let http = Http::with_policy(|_| true, |ip| !ip.is_loopback()).unwrap();
+    let url = format!("http://localhost:{}/image", server.address().port());
+    assert!(http
+        .request(reqwest::Method::GET, &url, 10, Session::Feed)
+        .is_err());
+    m.assert_calls(0);
+}
