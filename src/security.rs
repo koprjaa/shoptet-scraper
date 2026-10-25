@@ -2,7 +2,7 @@
 // File: security.rs
 // Description: URL, address, XML and spreadsheet trust boundaries.
 // Author: Jan Alexandr Kopřiva
-// License: MIT
+// License: AGPL-3.0-or-later
 use crate::Result;
 use std::{
     io::Read,

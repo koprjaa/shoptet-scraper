@@ -3,7 +3,7 @@ name = "shoptet-scraper"
 version = "1.0.0"
 edition = "2021"
 authors = ["Jan Alexandr Kopřiva"]
-license = "MIT"
+license = "AGPL-3.0-or-later"
 description = "Finds a Shoptet shop's product feeds and exports them to Excel with images."
 repository = "https://github.com/koprjaa/shoptet-scraper"
 

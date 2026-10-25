@@ -2,7 +2,7 @@
 // File: app.rs
 // Description: Shop discovery, interactive selection and scraping pipeline.
 // Author: Jan Alexandr Kopřiva
-// License: MIT
+// License: AGPL-3.0-or-later
 use crate::{
     extract_image_data, find_items, first_text, gallery,
     network::{Http, Session},

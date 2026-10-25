@@ -2,7 +2,7 @@
 // File: lib.rs
 // Description: Feed parsing and safe output values.
 // Author: Jan Alexandr Kopřiva
-// License: MIT
+// License: AGPL-3.0-or-later
 pub mod app;
 pub mod network;
 pub mod output;

@@ -2,7 +2,7 @@
 // File: network.rs
 // Description: Local HTTP mocks for retries, peers, discovery and redirects.
 // Author: Jan Alexandr Kopřiva
-// License: MIT
+// License: AGPL-3.0-or-later
 mod common;
 use common::Temp;
 use httpmock::{

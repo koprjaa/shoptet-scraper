@@ -3,7 +3,7 @@
 Finds a Shoptet shop's product feeds and exports them to Excel with images.
 
 [![CI](https://github.com/koprjaa/shoptet-scraper/actions/workflows/ci.yml/badge.svg)](https://github.com/koprjaa/shoptet-scraper/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-A31F34)](LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-A31F34)](LICENSE)
 
 ## What it does
 
@@ -53,4 +53,4 @@ See `shoptet-scraper --help` for the remaining options.
 
 ## License
 
-[MIT](LICENSE)
+[AGPL-3.0-or-later](LICENSE)

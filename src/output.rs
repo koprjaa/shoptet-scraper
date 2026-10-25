@@ -2,7 +2,7 @@
 // File: output.rs
 // Description: Session directories, JPEG conversion and Excel parts.
 // Author: Jan Alexandr Kopřiva
-// License: MIT
+// License: AGPL-3.0-or-later
 use crate::{security::sanitize_filename, ImageData, Result, HEADERS};
 use image::{codecs::jpeg::JpegEncoder, GenericImageView, ImageReader};
 use std::{

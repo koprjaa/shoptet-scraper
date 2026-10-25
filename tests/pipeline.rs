@@ -2,7 +2,7 @@
 // File: pipeline.rs
 // Description: End-to-end local feed, gallery, image and workbook regressions.
 // Author: Jan Alexandr Kopřiva
-// License: MIT
+// License: AGPL-3.0-or-later
 mod common;
 use common::Temp;
 use httpmock::{Method::GET, MockServer};

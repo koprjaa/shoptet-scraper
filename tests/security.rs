@@ -2,7 +2,7 @@
 // File: security.rs
 // Description: Offline equivalents of every original security test.
 // Author: Jan Alexandr Kopřiva
-// License: MIT
+// License: AGPL-3.0-or-later
 use shoptet_scraper::{network::Http, parse_xml, security::*};
 use std::{io::Cursor, net::IpAddr};
 fn ip(s: &str) -> IpAddr {

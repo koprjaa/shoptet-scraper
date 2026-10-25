@@ -2,7 +2,7 @@
 // File: feeds.rs
 // Description: Offline equivalents of the original feed tests.
 // Author: Jan Alexandr Kopřiva
-// License: MIT
+// License: AGPL-3.0-or-later
 use shoptet_scraper::*;
 const UNIVERSAL: &str = include_str!("fixtures/universal.xml");
 const GOOGLE: &str = include_str!("fixtures/google.xml");

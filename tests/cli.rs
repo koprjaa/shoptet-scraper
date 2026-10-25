@@ -2,7 +2,7 @@
 // File: cli.rs
 // Description: Executable argument, exit status and offline input tests.
 // Author: Jan Alexandr Kopřiva
-// License: MIT
+// License: AGPL-3.0-or-later
 mod common;
 use common::Temp;
 use std::{

@@ -2,7 +2,7 @@
 // File: tests/common/mod.rs
 // Description: Isolated test output directories inside the workspace.
 // Author: Jan Alexandr Kopřiva
-// License: MIT
+// License: AGPL-3.0-or-later
 use std::{
     path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},

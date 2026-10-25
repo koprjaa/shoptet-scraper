@@ -2,7 +2,7 @@
 // File: tests/audit.rs
 // Description: Differential observations captured from the Python original.
 // Author: Jan Alexandr Kopřiva
-// License: MIT
+// License: AGPL-3.0-or-later
 mod common;
 use shoptet_scraper::{decode_xml, extract_image_data, output::save_workbook, parse_xml};
 #[test]
